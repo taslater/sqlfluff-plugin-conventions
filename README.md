@@ -52,8 +52,12 @@ disagree.
 On an existing codebase, expect a backlog the first time you enable a rule:
 measured over 867 published Databricks SQL files, `no_select_star` and
 `require_comment` each fire on roughly a third of files, while type-aware
-naming fires on about 5% (it only sees declared types). Roll out rule by rule
-with `sqlfluff lint --rules`, or start by enforcing them on new files only.
+naming fires on about 5% (it only sees declared types). The governance rules
+are broader still: `require_qualified_names` fires on 273 files and
+`require_constraints` on 94, while the predicate-free DML guards
+(`delete_without_where`, `update_without_where`) fire on fewer than five
+files each — worth enabling everywhere. Roll out rule by rule with
+`sqlfluff lint --rules`, or start by enforcing them on new files only.
 Run `scripts/corpus_check.py` against your own code to see what a config will
 find before you commit to it.
 
