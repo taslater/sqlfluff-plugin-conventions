@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # sqlfluff 4.3.0 pins click<8.5.0, so higher click bumps cannot
+      # resolve. Remove this when SQLFluff's cap moves.
+      - dependency-name: click
   - package-ecosystem: github-actions
     directory: /
     schedule:
