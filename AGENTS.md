@@ -69,9 +69,24 @@ hatch for regexes containing `,` or `=`. Malformed input raises
 `comment_forbidden_patterns` is matched case-insensitively so `TODO` is
 caught; that is deliberate.
 
-**Rule codes are `Conventions_<N|M|A><NN>`** (naming / metadata /
+**Rule codes are `Conventions_<N|M|T|A><NN>`** (naming / metadata / types /
 antipatterns). `N001` is the one this project actually exists for; the rest
 are ports. Codes and config section names are compatibility surface.
+
+**Comment scoring takes exactly one team function and ships none.** M004
+loads a scorer named in config from three surfaces (entry-point name,
+`module:function`, `path.py:function`), calls it per comment, and fails the
+run loudly if it cannot load, raises, or returns anything outside 0–1. Do
+not add built-in scorers or presets — the point is that the team's judgment
+lives in the team's code. `example_scorers.py` is unregistered and exists
+only for docs and tests. The file-path spelling means config names code to
+import; the trust model is the same as plugins themselves, and the README
+says so.
+
+**Comment assignment is resolved before rules run.** `semantics.py` applies
+`COMMENT ON ...` and `ALTER TABLE ... ALTER COLUMN ... COMMENT` statements to
+the tables created in the same file, last one wins. Cross-file correlation is
+deliberately not attempted; a target not created in the file is ignored.
 
 ## Testing
 
@@ -80,6 +95,9 @@ are ports. Codes and config section names are compatibility surface.
 - `test/test_semantics.py` pins the model, especially its negatives:
   unknown types skipped, expression casts not treated as casts, comments not
   leaking out of nested types or view column lists.
+- `test/test_scoring.py` pins the scorer contract: every loader surface,
+  both protocols, and every way a scorer can fail (missing, non-callable,
+  wrong arity, raising, non-numeric, NaN, out of range).
 - `test/test_plugin.py` covers registration, defaults, and config errors.
 - `scripts/corpus_check.py` measures noise on real SQL and **always lints a
   deliberately broken control first**. A harness bug that loads no rules

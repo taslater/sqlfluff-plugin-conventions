@@ -1,0 +1,48 @@
+rule: Conventions_M006
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.require_constraints:
+      require_primary_key: True
+
+no_primary_key_fails:
+  fail_str: CREATE TABLE users (id BIGINT, email STRING)
+
+inline_primary_key_passes:
+  pass_str: CREATE TABLE users (id BIGINT PRIMARY KEY, email STRING)
+
+table_level_primary_key_passes:
+  pass_str: |
+    CREATE TABLE users (
+        id BIGINT,
+        email STRING,
+        CONSTRAINT users_pk PRIMARY KEY (id)
+    )
+
+not_null_required:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_constraints:
+        require_not_null: True
+  fail_str: CREATE TABLE users (id BIGINT NOT NULL, email STRING)
+
+not_null_satisfied:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_constraints:
+        require_not_null: True
+  pass_str: CREATE TABLE users (id BIGINT NOT NULL, email STRING NOT NULL)
+
+views_are_skipped:
+  pass_str: CREATE VIEW users_v AS SELECT 1
+
+inert_by_default:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE TABLE users (id BIGINT)

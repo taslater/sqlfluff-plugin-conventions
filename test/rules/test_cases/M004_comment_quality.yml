@@ -1,0 +1,97 @@
+rule: Conventions_M004
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.comment_quality:
+      comment_score_function: "sqlfluff_plugin_conventions.example_scorers:word_count"
+      comment_score_threshold: 0.6
+
+substantial_comment_passes:
+  pass_str: CREATE TABLE users (id BIGINT COMMENT 'Surrogate key from the identity pool')
+
+brief_comment_fails:
+  fail_str: CREATE TABLE users (id BIGINT COMMENT 'Surrogate key')
+
+one_word_comment_fails:
+  fail_str: CREATE TABLE users (id BIGINT COMMENT 'key')
+
+column_scope_can_be_disabled:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:word_count"
+        comment_score_threshold: 0.6
+        comment_score_columns: False
+        comment_score_tables: False
+  pass_str: CREATE TABLE users (id BIGINT COMMENT 'key')
+
+inert_without_threshold:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:word_count"
+  pass_str: CREATE TABLE users (id BIGINT COMMENT 'key')
+
+inert_without_function:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_threshold: 0.6
+  pass_str: CREATE TABLE users (id BIGINT COMMENT 'key')
+
+missing_comments_are_not_scored:
+  # Requiring a comment at all is M001's job; this rule only grades them.
+  pass_str: CREATE TABLE users (id BIGINT)
+
+table_comments_can_be_scored:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:word_count"
+        comment_score_threshold: 0.6
+        comment_score_columns: False
+        comment_score_tables: True
+  fail_str: CREATE TABLE users (id BIGINT) COMMENT 'users'
+
+context_aware_scorer_catches_restated_names:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:specificity"
+        comment_score_threshold: 0.5
+  fail_str: CREATE TABLE users (id BIGINT COMMENT 'the id')
+
+context_aware_scorer_passes_specific_comments:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:specificity"
+        comment_score_threshold: 0.5
+  pass_str: CREATE TABLE users (id BIGINT COMMENT 'Surrogate key from the identity pool')
+
+duplicate_comments_are_penalised:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:specificity"
+        comment_score_threshold: 0.5
+  fail_str: |
+    CREATE TABLE users (
+        id BIGINT COMMENT 'Surrogate key from the identity pool',
+        backup_id BIGINT COMMENT 'Surrogate key from the identity pool'
+    )

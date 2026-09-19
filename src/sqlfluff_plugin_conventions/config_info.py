@@ -70,6 +70,50 @@ CONFIGS_INFO: dict[str, dict[str, ConfigInfo]] = {
             "uses `search`."
         )
     },
+    "qualified_name_min_parts": {
+        "definition": (
+            "How many dotted parts a created object's name must have, e.g. "
+            "`3` for `catalog.schema.object`. Zero (the default) disables "
+            "the rule."
+        )
+    },
+    "require_cluster_by": {
+        "definition": "Whether created tables must declare CLUSTER BY.",
+        "validation": [True, False],
+    },
+    "require_partition_by": {
+        "definition": "Whether created tables must declare PARTITIONED BY.",
+        "validation": [True, False],
+    },
+    "allow_cluster_by_auto": {
+        "definition": ("Whether `CLUSTER BY AUTO` counts as a clustering design."),
+        "validation": [True, False],
+    },
+    "require_primary_key": {
+        "definition": (
+            "Whether created tables with declared columns must carry a "
+            "PRIMARY KEY, column-level or table-level."
+        ),
+        "validation": [True, False],
+    },
+    "require_not_null": {
+        "definition": ("Whether every declared column must carry NOT NULL."),
+        "validation": [True, False],
+    },
+    "forbidden_types": {
+        "definition": (
+            "A mapping from canonical datatype to the reason it is banned, "
+            "e.g. `FLOAT=use DECIMAL for money, DOUBLE=use DECIMAL`, or a "
+            "JSON object."
+        )
+    },
+    "types_requiring_parameters": {
+        "definition": (
+            "Canonical datatypes that must be written with explicit "
+            "parameters, e.g. `DECIMAL` to reject bare `DECIMAL`. A "
+            "comma-separated list or a JSON array."
+        )
+    },
     "require_table_comments": {
         "definition": "Whether every created table and view must carry a COMMENT.",
         "validation": [True, False],
@@ -122,6 +166,30 @@ CONFIGS_INFO: dict[str, dict[str, ConfigInfo]] = {
             "Whether `t.*` is allowed. A bare `*` is never allowed when this "
             "rule is enabled."
         ),
+        "validation": [True, False],
+    },
+    "comment_score_function": {
+        "definition": (
+            "The scorer used by comment_quality: an installed scorer name "
+            "from the `sqlfluff_conventions.comment_scorers` entry-point "
+            "group, `module:function`, or `path/to/scorers.py:function`. The "
+            "callable takes the comment string -- or a `CommentContext` if "
+            "annotated as such -- and returns a number between 0 and 1. No "
+            "scorers are built in; unset means the rule does nothing."
+        )
+    },
+    "comment_score_threshold": {
+        "definition": (
+            "Comments scoring below this number (0 to 1) are violations. "
+            "Unset means the rule does nothing."
+        )
+    },
+    "comment_score_columns": {
+        "definition": "Whether column comments are scored.",
+        "validation": [True, False],
+    },
+    "comment_score_tables": {
+        "definition": "Whether table and view comments are scored.",
         "validation": [True, False],
     },
 }

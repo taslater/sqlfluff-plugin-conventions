@@ -14,12 +14,19 @@ EXPECTED_CODES = {
     "Conventions_N003",
     "Conventions_N004",
     "Conventions_N005",
+    "Conventions_N006",
     "Conventions_M001",
     "Conventions_M002",
     "Conventions_M003",
+    "Conventions_M004",
+    "Conventions_M005",
+    "Conventions_M006",
+    "Conventions_T001",
     "Conventions_A001",
     "Conventions_A002",
     "Conventions_A003",
+    "Conventions_A004",
+    "Conventions_A005",
 }
 
 
@@ -63,6 +70,12 @@ def test_default_config_keeps_every_rule_inert():
         ]
         is False
     )
+    assert config.get_section(("rules", "conventions.comment_quality")) == {
+        "comment_score_function": "",
+        "comment_score_threshold": "",
+        "comment_score_columns": True,
+        "comment_score_tables": False,
+    }
 
 
 def _build_rulepack(rule_configs: dict):

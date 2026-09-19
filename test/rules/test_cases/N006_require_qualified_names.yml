@@ -1,0 +1,40 @@
+rule: Conventions_N006
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.require_qualified_names:
+      qualified_name_min_parts: 3
+
+unqualified_table_fails:
+  fail_str: CREATE TABLE orders (id BIGINT)
+
+two_part_name_fails:
+  fail_str: CREATE TABLE sales.orders (id BIGINT)
+
+fully_qualified_table_passes:
+  pass_str: CREATE TABLE prod.sales.orders (id BIGINT)
+
+unqualified_view_fails:
+  fail_str: CREATE VIEW active_users AS SELECT 1
+
+qualified_view_passes:
+  pass_str: CREATE VIEW prod.sales.vw_active_users AS SELECT 1
+
+minimum_can_be_two:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_qualified_names:
+        qualified_name_min_parts: 2
+  pass_str: CREATE TABLE sales.orders (id BIGINT)
+
+inert_at_zero:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_qualified_names:
+        qualified_name_min_parts: 0
+  pass_str: CREATE TABLE orders (id BIGINT)

@@ -1,0 +1,22 @@
+rule: Conventions_A004
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.delete_without_where:
+      force_enable: True
+
+predicateless_delete_fails:
+  fail_str: DELETE FROM users
+
+delete_with_predicate_passes:
+  pass_str: DELETE FROM users WHERE created_at < '2024-01-01'
+
+delete_using_join_with_predicate_passes:
+  pass_str: DELETE FROM users WHERE id IN (SELECT id FROM stale_users)
+
+inert_without_force_enable:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: DELETE FROM users

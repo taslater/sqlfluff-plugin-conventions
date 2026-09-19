@@ -1,0 +1,52 @@
+rule: Conventions_T001
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.type_policy:
+      forbidden_types: "FLOAT=use DECIMAL for money, DOUBLE=use DECIMAL for money"
+
+forbidden_type_fails:
+  fail_str: CREATE TABLE payments (amount FLOAT)
+
+allowed_type_passes:
+  pass_str: CREATE TABLE payments (amount DECIMAL(18, 2))
+
+forbidden_type_is_case_insensitive:
+  fail_str: CREATE TABLE payments (amount double)
+
+type_aliases_are_folded:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_policy:
+        forbidden_types: "DECIMAL=use a whole-number type for counts"
+  fail_str: CREATE TABLE counts (n NUMERIC(10, 0))
+
+cast_types_are_checked_too:
+  fail_str: SELECT CAST(x AS FLOAT) AS amount FROM t
+
+parameters_required:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_policy:
+        types_requiring_parameters: "DECIMAL"
+  fail_str: CREATE TABLE payments (amount DECIMAL)
+
+parameters_provided_passes:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_policy:
+        types_requiring_parameters: "DECIMAL"
+  pass_str: CREATE TABLE payments (amount DECIMAL(18, 2))
+
+inert_without_policy:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE TABLE payments (amount FLOAT)

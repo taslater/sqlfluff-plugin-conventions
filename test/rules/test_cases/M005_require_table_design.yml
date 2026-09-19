@@ -1,0 +1,53 @@
+rule: Conventions_M005
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.require_table_design:
+      require_cluster_by: True
+
+no_clustering_fails:
+  fail_str: CREATE TABLE events (id BIGINT)
+
+clustered_passes:
+  pass_str: CREATE TABLE events (id BIGINT) CLUSTER BY (id)
+
+cluster_by_auto_allowed_by_default:
+  pass_str: CREATE TABLE events (id BIGINT) CLUSTER BY AUTO
+
+cluster_by_auto_can_be_rejected:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_table_design:
+        require_cluster_by: True
+        allow_cluster_by_auto: False
+  fail_str: CREATE TABLE events (id BIGINT) CLUSTER BY AUTO
+
+partition_requirement:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_table_design:
+        require_partition_by: True
+  fail_str: CREATE TABLE events (id BIGINT)
+
+partitioned_passes:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_table_design:
+        require_partition_by: True
+  pass_str: CREATE TABLE events (id BIGINT) PARTITIONED BY (id)
+
+views_are_skipped:
+  pass_str: CREATE VIEW events_v AS SELECT 1
+
+inert_by_default:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE TABLE events (id BIGINT)

@@ -325,3 +325,52 @@ class Rule_Conventions_N005(ConventionsRule, BaseRule):
                 )
             )
         return results or None
+
+
+class Rule_Conventions_N006(ConventionsRule, BaseRule):
+    """Created objects must be qualified with their schema.
+
+    **Anti-pattern**
+
+    .. code-block:: sql
+
+        CREATE TABLE orders (id BIGINT);
+
+    **Best practice**
+
+    .. code-block:: sql
+
+        CREATE TABLE sales.orders (id BIGINT);
+
+    An unqualified name lands in whatever the session's default schema
+    happens to be, which differs between a notebook, a job and a migration.
+    ``qualified_name_min_parts`` is the number of dotted parts required, so
+    ``3`` demands ``catalog.schema.object`` where the platform supports it.
+    """
+
+    name = "conventions.require_qualified_names"
+    groups = ("all", "conventions", "naming")
+    config_keywords = ["qualified_name_min_parts"]
+    qualified_name_min_parts: int
+
+    def _eval(self, context: RuleContext) -> list[LintResult] | None:
+        minimum = self.qualified_name_min_parts
+        if not isinstance(minimum, int) or minimum <= 0:
+            return None
+        results = []
+        for table in self._analysis(context).tables:
+            if not table.name:
+                continue
+            parts = table.name.split(".")
+            if len(parts) < minimum:
+                results.append(
+                    LintResult(
+                        anchor=table.segment,
+                        description=(
+                            f"{table.kind.replace('_', ' ')} {table.name!r} "
+                            f"has {len(parts)} qualified part(s); "
+                            f"{minimum} required"
+                        ),
+                    )
+                )
+        return results or None

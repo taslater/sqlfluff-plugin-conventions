@@ -12,6 +12,12 @@ should be called is a decision for your team, not for a linter.
 ## Install
 
 ```bash
+pip install sqlfluff-plugin-conventions
+```
+
+Until the first PyPI release lands, install from git:
+
+```bash
 pip install git+https://github.com/taslater/sqlfluff-plugin-conventions
 ```
 
@@ -60,17 +66,39 @@ find before you commit to it.
 | `Conventions_N003` | `conventions.identifier_length` | Maximum column-name length | `max_identifier_length` |
 | `Conventions_N004` | `conventions.forbidden_name` | Names matching banned patterns, with a reason | `forbidden_patterns` |
 | `Conventions_N005` | `conventions.object_name` | Per-kind naming for tables, views, streaming tables, materialized views | `object_patterns` |
+| `Conventions_N006` | `conventions.require_qualified_names` | Created objects must be schema-qualified | `qualified_name_min_parts` |
 | `Conventions_M001` | `conventions.require_comment` | Comments exist and are meaningful | `require_table_comments`, `require_column_comments`, `comment_min_length`, `comment_forbidden_patterns` |
 | `Conventions_M002` | `conventions.require_table_properties` | Required `TBLPROPERTIES` keys and values | `required_property_keys`, `required_property_values` |
 | `Conventions_M003` | `conventions.require_table_provider` | `USING` allowlist | `allowed_providers`, `require_explicit_provider` |
+| `Conventions_M004` | `conventions.comment_quality` | Comment score from **your own function** clears a threshold | `comment_score_function`, `comment_score_threshold` |
+| `Conventions_M005` | `conventions.require_table_design` | `CLUSTER BY` / `PARTITIONED BY` declared | `require_cluster_by`, `require_partition_by`, `allow_cluster_by_auto` |
+| `Conventions_M006` | `conventions.require_constraints` | `PRIMARY KEY` / `NOT NULL` present | `require_primary_key`, `require_not_null` |
+| `Conventions_T001` | `conventions.type_policy` | Forbidden types; explicit parameters | `forbidden_types`, `types_requiring_parameters` |
 | `Conventions_A001` | `conventions.no_select_star` | `SELECT *` (optionally allowing `t.*`) | `force_enable`, `allow_qualified_star` |
 | `Conventions_A002` | `conventions.drop_requires_if_exists` | `DROP … IF EXISTS` | `force_enable` |
 | `Conventions_A003` | `conventions.insert_requires_column_list` | Named `INSERT` columns or `BY NAME` | `force_enable` |
+| `Conventions_A004` | `conventions.delete_without_where` | Predicate-free `DELETE` | `force_enable` |
+| `Conventions_A005` | `conventions.update_without_where` | Predicate-free `UPDATE` | `force_enable` |
 
 Rules with no patterns of their own are off until `force_enable = True` in
 their config section. The rest are inert until their patterns or booleans are
 set. `sqlfluff rules` lists them all; run `sqlfluff rules --verbose` for full
 configuration docs.
+
+## sqruff compatibility
+
+None, by design. sqruff has no plugin system and a fixed Rust rule set; its
+configuration files are `.sqruff` / `sqruff.toml` / `pyproject.toml`, and it
+does not read `.sqlfluff`. These rules cannot run there, and porting them into
+sqruff would duplicate work its SQLFluff replay already does.
+
+If you want sqruff's speed and these conventions, run both in the same CI:
+sqruff for formatting and core style, SQLFluff for the convention rules.
+
+```bash
+sqruff lint .
+sqlfluff lint . --rules Conventions_N001,Conventions_M001
+```
 
 ### Type-aware naming, the unusual one
 
@@ -115,6 +143,65 @@ comment_forbidden_patterns = ["^(todo|tbd|n/?a)$", "the .*"]
 Malformed values raise a config error naming the offending text; nothing is
 silently dropped.
 
+## Comment scoring: bring your own function
+
+`conventions.comment_quality` has no scorer of its own. You write a function
+that takes a comment and returns a number between 0 and 1; the rule reports
+every existing comment that scores below your threshold. Requiring a comment
+at all is still `require_comment` — the two rules coexist, and enabling both
+means a bad comment is reported by both.
+
+```python
+# tools/scorers.py
+from sqlfluff_plugin_conventions.scoring import CommentContext, CommentScore
+
+
+def decent(comment: str) -> float:
+    """One-liner scorers just take the text."""
+    return min(1.0, len(comment.split()) / 4)
+
+
+def not_just_the_name(ctx: CommentContext) -> CommentScore:
+    """Annotate the argument as CommentContext for name, datatype and more."""
+    if ctx.name.lower() in ctx.comment.lower():
+        return CommentScore(0.0, "comment only restates the column name")
+    return CommentScore(1.0)
+```
+
+```ini
+[sqlfluff]
+rules = Conventions_M004
+
+[sqlfluff:rules:conventions.comment_quality]
+comment_score_function = tools/scorers.py:not_just_the_name
+comment_score_threshold = 0.6
+comment_score_columns = True
+comment_score_tables = False
+```
+
+`comment_score_function` accepts three spellings:
+
+* `path/to/scorers.py:function` — a plain script in your repo
+* `package.module:function` — any installed module
+* an entry-point name from the group `sqlfluff_conventions.comment_scorers`,
+  for scorers shipped as packages
+
+Exactly one scorer runs per rule instance. Compose your own: a function can
+call other functions and return `CommentScore(value, notes)` to attach its
+reasoning to the finding.
+
+A scorer that cannot be loaded, raises, returns a non-number, or returns a
+value outside 0–1 fails the lint run with the scorer's name in the message.
+That is deliberate: a comment scorer that silently does nothing makes a clean
+report a lie.
+
+Scorers are code you install or name in config, which is the same trust model
+as SQLFluff plugins themselves — running SQLFluff already executes arbitrary
+code from installed packages. The file-path spelling means a `.sqlfluff` from
+an untrusted source can name a script to import, so treat config as code: use
+the entry-point spelling when configuration is shared across teams. Nothing is
+fetched or `eval`'d from a string.
+
 ## Writing your own rules
 
 `semantics.py` is a public API. It turns any SQLFluff parse tree into a small
@@ -144,8 +231,12 @@ class Rule_MyTeam_X001(BaseRule):
 ```
 
 Columns carry `name`, `canonical_type`, `raw_type`, `comment`, `origin`
-(`declaration` / `cast` / `alias`) and the `segment` to anchor a violation on.
-The API is versioned with the package: it changes only with a minor release.
+(`declaration` / `cast` / `alias`), `primary_key`, `not_null` and the
+`segment` to anchor a violation on. Tables carry `kind`, `provider`,
+`properties`, `comment`, `primary_key`, `cluster_by`, `cluster_by_auto` and
+`partitioned_by`. Comments declared later with `COMMENT ON` or `ALTER
+TABLE … COMMENT` are folded in before rules run. The API is versioned with
+the package: it changes only with a minor release.
 
 ## Working on the plugin
 

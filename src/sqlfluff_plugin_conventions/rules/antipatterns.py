@@ -139,3 +139,91 @@ class Rule_Conventions_A003(ConventionsRule, BaseRule):
                 )
             )
         return results or None
+
+
+class Rule_Conventions_A004(ConventionsRule, BaseRule):
+    """DELETE must carry a WHERE clause.
+
+    **Anti-pattern**
+
+    .. code-block:: sql
+
+        DELETE FROM users;
+
+    **Best practice**
+
+    .. code-block:: sql
+
+        DELETE FROM users WHERE created_at < '2024-01-01';
+
+    A predicate-free ``DELETE`` removes every row. When clearing a table is
+    really intended, saying so with ``TRUNCATE`` is clearer and faster.
+    """
+
+    name = "conventions.delete_without_where"
+    groups = ("all", "conventions", "antipatterns")
+    config_keywords = ["force_enable"]
+    force_enable: bool
+
+    def _eval(self, context: RuleContext) -> list[LintResult] | None:
+        if not self.force_enable:
+            return None
+        results = []
+        analysis = self._analysis(context)
+        for kind, anchor in analysis.destructive_statements_without_where:
+            if kind != "delete":
+                continue
+            results.append(
+                LintResult(
+                    anchor=anchor,
+                    description=(
+                        "DELETE without a WHERE clause removes every row; add "
+                        "a predicate or use TRUNCATE deliberately"
+                    ),
+                )
+            )
+        return results or None
+
+
+class Rule_Conventions_A005(ConventionsRule, BaseRule):
+    """UPDATE must carry a WHERE clause.
+
+    **Anti-pattern**
+
+    .. code-block:: sql
+
+        UPDATE users SET active = FALSE;
+
+    **Best practice**
+
+    .. code-block:: sql
+
+        UPDATE users SET active = FALSE WHERE last_seen < '2024-01-01';
+
+    A predicate-free ``UPDATE`` rewrites every row, and a mistyped predicate
+    that becomes no predicate is one of the easiest mistakes to ship.
+    """
+
+    name = "conventions.update_without_where"
+    groups = ("all", "conventions", "antipatterns")
+    config_keywords = ["force_enable"]
+    force_enable: bool
+
+    def _eval(self, context: RuleContext) -> list[LintResult] | None:
+        if not self.force_enable:
+            return None
+        results = []
+        analysis = self._analysis(context)
+        for kind, anchor in analysis.destructive_statements_without_where:
+            if kind != "update":
+                continue
+            results.append(
+                LintResult(
+                    anchor=anchor,
+                    description=(
+                        "UPDATE without a WHERE clause rewrites every row; "
+                        "add a predicate"
+                    ),
+                )
+            )
+        return results or None

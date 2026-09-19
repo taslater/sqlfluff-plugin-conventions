@@ -1,0 +1,19 @@
+rule: Conventions_A005
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.update_without_where:
+      force_enable: True
+
+predicateless_update_fails:
+  fail_str: UPDATE users SET active = FALSE
+
+update_with_predicate_passes:
+  pass_str: UPDATE users SET active = FALSE WHERE last_seen < '2024-01-01'
+
+inert_without_force_enable:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: UPDATE users SET active = FALSE

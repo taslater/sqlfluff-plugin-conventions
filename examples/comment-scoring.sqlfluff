@@ -1,0 +1,26 @@
+# Comment quality with your own scorer function.
+#
+# There are no built-in scorers. comment_score_function names one callable:
+#   * path/to/scorers.py:function   (a script in your repo)
+#   * package.module:function       (an installed module)
+#   * an entry-point name from the group
+#     sqlfluff_conventions.comment_scorers
+#
+# Here we use the illustrative functions that ship with the plugin; copy them
+# into your own module and edit. A scorer returns 0..1 for one comment, and
+# comments below the threshold are findings. Requiring a comment at all is
+# conventions.require_comment, which this rule does not replace.
+
+[sqlfluff]
+dialect = databricks
+rules = Conventions_M001,Conventions_M004
+
+[sqlfluff:rules:conventions.require_comment]
+require_table_comments = True
+require_column_comments = True
+
+[sqlfluff:rules:conventions.comment_quality]
+comment_score_function = sqlfluff_plugin_conventions.example_scorers:specificity
+comment_score_threshold = 0.5
+comment_score_columns = True
+comment_score_tables = False

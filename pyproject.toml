@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sqlfluff-plugin-conventions"
-version = "0.1.0"
+version = "0.2.0"
 description = "Config-driven team conventions for SQLFluff: type-aware column naming, required comments, naming and anti-pattern rules."
 readme = "README.md"
 requires-python = ">=3.10"

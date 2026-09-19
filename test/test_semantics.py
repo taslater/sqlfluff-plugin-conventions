@@ -206,3 +206,101 @@ def test_inserts_without_column_list():
         "INSERT INTO t VALUES (1)"
     )
     assert len(analysis.inserts_without_column_list) == 2
+
+
+def test_destructive_statements_without_where():
+    analysis = model(
+        "DELETE FROM t; DELETE FROM t WHERE x = 1;"
+        "UPDATE t SET x = 1; UPDATE t SET x = 1 WHERE id = 2"
+    )
+    assert [kind for kind, _ in analysis.destructive_statements_without_where] == [
+        "delete",
+        "update",
+    ]
+
+
+# --- comment assignments ----------------------------------------------------
+
+
+def test_comment_on_satisfies_table_comment():
+    analysis = model(
+        "CREATE TABLE t (id INT); COMMENT ON TABLE t IS 'Registered users'"
+    )
+    assert analysis.tables[0].comment == "Registered users"
+
+
+def test_comment_on_column_satisfies_column_comment():
+    analysis = model(
+        "CREATE TABLE t (id INT); COMMENT ON COLUMN t.id IS 'surrogate key'"
+    )
+    assert analysis.tables[0].columns[0].comment == "surrogate key"
+
+
+def test_comment_on_qualified_target_matches_unqualified_table():
+    analysis = model(
+        "CREATE TABLE t (id INT);COMMENT ON COLUMN default.t.id IS 'surrogate key'"
+    )
+    assert analysis.tables[0].columns[0].comment == "surrogate key"
+
+
+def test_alter_table_column_comment_is_applied():
+    analysis = model(
+        "CREATE TABLE t (id INT);ALTER TABLE t ALTER COLUMN id COMMENT 'surrogate key'"
+    )
+    assert analysis.tables[0].columns[0].comment == "surrogate key"
+
+
+def test_comment_assignments_ignore_uncreated_targets():
+    analysis = model("CREATE TABLE t (id INT); COMMENT ON TABLE other IS 'elsewhere'")
+    assert analysis.tables[0].comment is None
+
+
+def test_later_comment_assignment_wins():
+    analysis = model(
+        "CREATE TABLE t (id INT COMMENT 'first') COMMENT 'one';"
+        "COMMENT ON COLUMN t.id IS 'second';"
+        "COMMENT ON TABLE t IS 'two'"
+    )
+    table = analysis.tables[0]
+    assert table.columns[0].comment == "second"
+    assert table.comment == "two"
+
+
+# --- physical design and constraints ----------------------------------------
+
+
+def test_table_design_clauses():
+    analysis = model(
+        "CREATE TABLE t1 (a INT) CLUSTER BY (a);"
+        "CREATE TABLE t2 (a INT) CLUSTER BY AUTO;"
+        "CREATE TABLE t3 (a INT) PARTITIONED BY (a);"
+        "CREATE TABLE t4 (a INT)"
+    )
+    t1, t2, t3, t4 = analysis.tables
+    assert (t1.cluster_by, t1.cluster_by_auto, t1.partitioned_by) == (
+        True,
+        False,
+        False,
+    )
+    assert (t2.cluster_by, t2.cluster_by_auto) == (True, True)
+    assert (t3.partitioned_by, t3.cluster_by) == (True, False)
+    assert (t4.cluster_by, t4.partitioned_by) == (False, False)
+
+
+def test_constraints_are_captured():
+    analysis = model(
+        "CREATE TABLE t ("
+        " a INT PRIMARY KEY,"
+        " b STRING NOT NULL,"
+        " c INT,"
+        " CONSTRAINT pk PRIMARY KEY (c)"
+        ")"
+    )
+    table = analysis.tables[0]
+    assert table.primary_key is True
+    by_name = {column.name: column for column in table.columns}
+    assert by_name["a"].primary_key is True
+    assert by_name["a"].not_null is False
+    assert by_name["b"].primary_key is False
+    assert by_name["b"].not_null is True
+    assert by_name["c"].not_null is False

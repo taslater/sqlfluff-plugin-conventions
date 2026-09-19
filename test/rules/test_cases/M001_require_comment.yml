@@ -57,3 +57,34 @@ table_comments_can_be_disabled:
         require_table_comments: False
         require_column_comments: False
   pass_str: CREATE TABLE users (id BIGINT)
+
+comment_on_table_satisfies:
+  pass_str: |
+    CREATE TABLE users (id BIGINT COMMENT 'Surrogate key');
+    COMMENT ON TABLE users IS 'Registered users'
+
+comment_on_column_satisfies:
+  pass_str: |
+    CREATE TABLE users (id BIGINT) COMMENT 'Registered users';
+    COMMENT ON COLUMN users.id IS 'Surrogate key from the identity pool'
+
+comment_on_qualified_column_satisfies:
+  pass_str: |
+    CREATE TABLE prod.sales.users (id BIGINT) COMMENT 'Registered users';
+    COMMENT ON COLUMN prod.sales.users.id IS 'Surrogate key'
+
+alter_column_comment_satisfies:
+  pass_str: |
+    CREATE TABLE users (id BIGINT) COMMENT 'Registered users';
+    ALTER TABLE users ALTER COLUMN id COMMENT 'Surrogate key'
+
+comment_on_an_uncreated_object_is_ignored:
+  fail_str: |
+    CREATE TABLE users (id BIGINT) COMMENT 'Registered users';
+    COMMENT ON TABLE other_table IS 'not this file''s problem'
+
+comment_on_another_schema_still_matches_by_name:
+  pass_str: |
+    CREATE TABLE users (id BIGINT);
+    COMMENT ON TABLE default.users IS 'Registered users';
+    COMMENT ON COLUMN default.users.id IS 'Surrogate key'

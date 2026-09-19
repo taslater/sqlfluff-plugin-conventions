@@ -52,6 +52,8 @@ class Column:
     raw_type: str | None = None  # as written, e.g. "decimal(10,2)"
     comment: str | None = None
     origin: str = "declaration"
+    primary_key: bool = False
+    not_null: bool = False
 
     @property
     def has_type(self) -> bool:
@@ -70,6 +72,10 @@ class Table:
     provider: str | None = None  # the USING clause, lowercased
     comment: str | None = None
     properties: dict[str, str] = field(default_factory=dict)
+    primary_key: bool = False  # a table-level PRIMARY KEY constraint
+    cluster_by: bool = False  # a CLUSTER BY clause (including AUTO)
+    cluster_by_auto: bool = False  # CLUSTER BY AUTO specifically
+    partitioned_by: bool = False
 
 
 @dataclass
@@ -89,6 +95,9 @@ class Analysis:
     select_stars: list[SelectStar] = field(default_factory=list)
     drops_without_if_exists: list[tuple[str, BaseSegment]] = field(default_factory=list)
     inserts_without_column_list: list[BaseSegment] = field(default_factory=list)
+    destructive_statements_without_where: list[tuple[str, BaseSegment]] = field(
+        default_factory=list
+    )
 
 
 # --- type handling ----------------------------------------------------------
@@ -241,6 +250,42 @@ def _has_if_exists(seg: BaseSegment) -> bool:
     return "IF" in keywords and "EXISTS" in keywords
 
 
+def _keywords(seg: BaseSegment, skip: tuple[str, ...] = ()) -> list[str]:
+    """Uppercased keyword children anywhere under ``seg``, minus skip."""
+    found: list[str] = []
+    for child in seg.segments:
+        if child.is_type(*skip):
+            continue
+        if child.is_type("keyword"):
+            found.append(child.raw_upper)
+        if child.segments:
+            found.extend(_keywords(child, skip))
+    return found
+
+
+def _has_keywords(seg: BaseSegment, *words: str, skip: tuple[str, ...] = ()) -> bool:
+    keywords = _keywords(seg, skip)
+    return all(word in keywords for word in words)
+
+
+def _has_partitioned_by(stmt: BaseSegment) -> bool:
+    keywords = [child.raw_upper for child in stmt.segments if child.is_type("keyword")]
+    return any(
+        first == "PARTITIONED" and second == "BY"
+        for first, second in zip(keywords, keywords[1:])
+    )
+
+
+def _table_has_primary_key(stmt: BaseSegment) -> bool:
+    bracketed = stmt.get_child("bracketed")
+    if bracketed is None:
+        return False
+    return any(
+        _has_keywords(constraint, "PRIMARY", "KEY")
+        for constraint in bracketed.recursive_crawl("table_constraint")
+    )
+
+
 # --- per-statement extraction ----------------------------------------------
 
 
@@ -372,6 +417,112 @@ def _insert_has_column_list(stmt: BaseSegment) -> bool:
     return "BY" in keywords and "NAME" in keywords
 
 
+# --- comment assignments ----------------------------------------------------
+
+
+def _reference_parts(ref: BaseSegment) -> list[str]:
+    """The unquoted identifier parts of a reference, outermost first."""
+    return [
+        _unquote(seg.raw)
+        for seg in ref.recursive_crawl("naked_identifier", "quoted_identifier")
+    ]
+
+
+def _match_table(tables: list[Table], name: str) -> Table | None:
+    """Find a created table by name, tolerating qualification differences."""
+    target = name.strip().casefold()
+    if not target:
+        return None
+    for table in tables:
+        created = table.name.casefold()
+        if created == target:
+            return table
+    target_last = target.rsplit(".", 1)[-1]
+    for table in tables:
+        if table.name.casefold().rsplit(".", 1)[-1] == target_last:
+            return table
+    return None
+
+
+def _comment_on_target(
+    clause: BaseSegment,
+) -> tuple[str, BaseSegment, BaseSegment] | None:
+    """(kind, reference, literal) for a top-level COMMENT ON clause."""
+    kind = None
+    reference = None
+    literal = None
+    for child in clause.segments:
+        if child.is_type("keyword"):
+            if child.raw_upper == "COLUMN":
+                kind = "column"
+            elif child.raw_upper == "TABLE":
+                kind = "table"
+        elif child.is_type("column_reference", "table_reference"):
+            reference = child
+        elif child.is_type("quoted_literal"):
+            literal = child
+    if kind is None or reference is None or literal is None:
+        return None
+    return kind, reference, literal
+
+
+def _set_column_comment(table: Table, column_name: str, value: str) -> None:
+    for column in table.columns:
+        if column.name.casefold() == column_name.casefold():
+            column.comment = value
+            return
+
+
+def _apply_comment_assignments(tree: BaseSegment, analysis: Analysis) -> None:
+    """Let COMMENT ON and ALTER ... COMMENT statements fill in comments.
+
+    A comment declared after the CREATE in the same file is as good as one
+    written inline, and the last declaration wins. Targets not created in
+    this file are ignored: a linter cannot see across files, and pretending
+    otherwise would report every migration as undocumented.
+    """
+    for clause in tree.recursive_crawl("comment_clause"):
+        if not any(
+            child.is_type("keyword") and child.raw_upper == "ON"
+            for child in clause.segments
+        ):
+            continue
+        target = _comment_on_target(clause)
+        if target is None:
+            continue
+        kind, reference, literal = target
+        value = _unquote(literal.raw)
+        parts = _reference_parts(reference)
+        if not parts:
+            continue
+        if kind == "column":
+            if len(parts) < 2:
+                continue
+            table = _match_table(analysis.tables, ".".join(parts[:-1]))
+            if table is not None:
+                _set_column_comment(table, parts[-1], value)
+        else:
+            table = _match_table(analysis.tables, ".".join(parts))
+            if table is not None:
+                table.comment = value
+
+    for stmt in tree.recursive_crawl("alter_table_statement"):
+        keywords = [
+            child.raw_upper for child in stmt.segments if child.is_type("keyword")
+        ]
+        if "COLUMN" not in keywords or "COMMENT" not in keywords:
+            continue
+        table_ref = stmt.get_child("table_reference")
+        column_ref = next(stmt.recursive_crawl("column_reference"), None)
+        literal = next(stmt.recursive_crawl("quoted_literal"), None)
+        if table_ref is None or column_ref is None or literal is None:
+            continue
+        table = _match_table(analysis.tables, _unquote(table_ref.raw))
+        parts = _reference_parts(column_ref)
+        if table is not None and parts:
+            _set_column_comment(table, parts[-1], _unquote(literal.raw))
+
+
 # --- the walker -------------------------------------------------------------
 
 
@@ -381,6 +532,7 @@ def _walk(seg: BaseSegment, table: Table | None, analysis: Analysis) -> None:
         "create_view_statement",
         "create_materialized_view_statement",
     ):
+        cluster_clause = seg.get_child("table_cluster_by_clause")
         table = Table(
             name=_table_name(seg),
             segment=seg,
@@ -388,6 +540,12 @@ def _walk(seg: BaseSegment, table: Table | None, analysis: Analysis) -> None:
             provider=_table_provider(seg),
             comment=_find_comment(seg, _TABLE_COMMENT_SKIP),
             properties=_table_properties(seg),
+            primary_key=_table_has_primary_key(seg),
+            cluster_by=cluster_clause is not None,
+            cluster_by_auto=(
+                cluster_clause is not None and "AUTO" in _keywords(cluster_clause)
+            ),
+            partitioned_by=_has_partitioned_by(seg),
         )
         analysis.tables.append(table)
         if table.kind == "view":
@@ -398,6 +556,7 @@ def _walk(seg: BaseSegment, table: Table | None, analysis: Analysis) -> None:
         if name_seg is not None:
             data_type = seg.get_child("data_type")
             raw_type = data_type.raw if data_type is not None else None
+            constraint = next(seg.recursive_crawl("column_constraint_segment"), None)
             column = Column(
                 name=_unquote(name_seg.raw),
                 segment=name_seg,
@@ -405,6 +564,11 @@ def _walk(seg: BaseSegment, table: Table | None, analysis: Analysis) -> None:
                 raw_type=raw_type,
                 comment=_find_comment(seg, ("data_type",)),
                 origin="declaration",
+                primary_key=(
+                    constraint is not None
+                    and _has_keywords(constraint, "PRIMARY", "KEY")
+                ),
+                not_null=_has_keywords(seg, "NOT", "NULL", skip=("data_type",)),
             )
             analysis.columns.append(column)
             if table is not None:
@@ -455,6 +619,11 @@ def _walk(seg: BaseSegment, table: Table | None, analysis: Analysis) -> None:
         if not _insert_has_column_list(seg):
             analysis.inserts_without_column_list.append(seg)
 
+    elif seg.is_type("delete_statement", "update_statement"):
+        if seg.get_child("where_clause") is None:
+            kind = "delete" if seg.is_type("delete_statement") else "update"
+            analysis.destructive_statements_without_where.append((kind, seg))
+
     for child in seg.segments:
         _walk(child, table, analysis)
 
@@ -464,4 +633,5 @@ def analyse(tree: BaseSegment | None) -> Analysis:
     analysis = Analysis()
     if tree is not None:
         _walk(tree, None, analysis)
+        _apply_comment_assignments(tree, analysis)
     return analysis

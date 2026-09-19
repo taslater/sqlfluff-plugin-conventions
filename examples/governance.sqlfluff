@@ -1,0 +1,41 @@
+# Platform governance: how tables are named, designed, constrained and typed.
+#
+# Every rule here is off until configured, and every value is a starting
+# point, not a recommendation. This is the config used to measure noise on
+# real SQL; expect a large backlog on an existing codebase -- roll out rule
+# by rule.
+
+[sqlfluff]
+dialect = databricks
+rules =
+    Conventions_N006,
+    Conventions_M005,
+    Conventions_M006,
+    Conventions_T001,
+    Conventions_A004,
+    Conventions_A005
+
+[sqlfluff:rules:conventions.require_qualified_names]
+# 2 = schema.object; 3 = catalog.schema.object.
+qualified_name_min_parts = 2
+
+[sqlfluff:rules:conventions.require_table_design]
+require_cluster_by = True
+require_partition_by = False
+# Refuse CLUSTER BY AUTO so the keys are always deliberate.
+allow_cluster_by_auto = False
+
+[sqlfluff:rules:conventions.require_constraints]
+require_primary_key = True
+require_not_null = True
+
+[sqlfluff:rules:conventions.type_policy]
+forbidden_types = FLOAT=use DECIMAL for money, DOUBLE=use DECIMAL for money
+# Bare DECIMAL means DECIMAL(10, 0); make the precision explicit.
+types_requiring_parameters = DECIMAL
+
+[sqlfluff:rules:conventions.delete_without_where]
+force_enable = True
+
+[sqlfluff:rules:conventions.update_without_where]
+force_enable = True
