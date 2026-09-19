@@ -7,8 +7,9 @@ While the plugin is pre-1.0, only the latest release receives fixes.
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting on this repository
-(Security → Report a vulnerability). Please do not open a public issue for
-anything security-related.
+(Security → Report a vulnerability) at
+https://github.com/taslater/sqlfluff-plugin-conventions/security/advisories/new
+Please do not open a public issue for anything security-related.
 
 ## Trust model
 

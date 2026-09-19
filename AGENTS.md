@@ -143,9 +143,29 @@ roughly 78–83% in September 2026); the floor sits below the band on purpose.
 Target: 90%.
 
 **Actions are SHA-pinned** with version comments, Dependabot updates them,
-and releases carry PEP 740 attestations and an SPDX SBOM. The dev toolchain
-is hash-pinned in `requirements-dev.txt`; regenerate with
-`pip-compile --allow-unsafe --generate-hashes --extra dev --output-file requirements-dev.txt pyproject.toml`.
+and releases carry PEP 740 attestations and an SPDX SBOM.
+
+**Every `pip install` in CI is hash-pinned.** Scorecard's
+Pinned-Dependencies check flags any `pip install` without `--require-hashes`,
+and each one shows up as an open code-scanning alert. The lock files and how
+to regenerate each (`uv` is a local tool; `brew install uv`):
+
+| file | used by | regenerate with |
+| --- | --- | --- |
+| `requirements-dev.txt` | lint, audit, test (3.13), mutation | `pip-compile --allow-unsafe --generate-hashes --extra=dev --output-file=requirements-dev.txt pyproject.toml` |
+| `requirements-test.txt` | test (3.10) | `uv pip compile --python-version 3.10 --generate-hashes --extra test pyproject.toml -o requirements-test.txt` |
+| `requirements-floor.txt` | floor job | `uv pip compile --python-version 3.10 --generate-hashes --extra test -c floor-constraints.txt pyproject.toml -o requirements-floor.txt` |
+| `requirements-build.txt` | publish | `printf 'build\n' \| uv pip compile --python-version 3.12 --generate-hashes -o requirements-build.txt -` |
+
+Dependabot scans these files too. **Do not accept a bump of `sqlfluff` in
+`requirements-floor.txt`**: `floor-constraints.txt` holds it at the declared
+minimum on purpose, and a bump would silently turn the floor job into a
+latest-version job. `requirements-dev.txt` should track the current release;
+that is the bump to take.
+
+These locks exist only because CI must be installable on both Python 3.10
+and 3.13: SQLFluff requires `tomli` below 3.11 and mutmut's `libcst` requires
+`pyyaml-ft` on 3.13, so no single lock can serve both interpreters.
 
 ## Releasing
 

@@ -19,7 +19,7 @@ jobs:
           python-version: "3.13"
       - name: Install (hash-pinned)
         run: |
-          pip install -r requirements-dev.txt
+          pip install --require-hashes -r requirements-dev.txt
           pip install -e . --no-deps
       - name: Ruff
         run: |
@@ -41,7 +41,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: pip install -e ".[dev]"
+        run: |
+          if [ "${{ matrix.python-version }}" = "3.13" ]; then
+            pip install --require-hashes -r requirements-dev.txt
+          else
+            pip install --require-hashes -r requirements-test.txt
+          fi
+          pip install -e . --no-deps
       - name: Test
         run: pytest -q --hypothesis-seed=0 --cov=sqlfluff_plugin_conventions --cov-fail-under=100
 
@@ -55,7 +61,7 @@ jobs:
           python-version: "3.10"
       - name: Install the declared floor
         run: |
-          pip install "sqlfluff==4.3.0" pytest hypothesis
+          pip install --require-hashes -r requirements-floor.txt
           pip install -e . --no-deps
       - name: Test against the floor
         run: pytest -q
@@ -70,8 +76,7 @@ jobs:
           python-version: "3.13"
       - name: Install (hash-pinned)
         run: |
-          pip install -r requirements-dev.txt
+          pip install --require-hashes -r requirements-dev.txt
           pip install -e . --no-deps
-          pip install pip-audit
       - name: Audit dependencies
         run: pip-audit --skip-editable
