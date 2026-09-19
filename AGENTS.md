@@ -5,11 +5,12 @@ Guidance for AI coding agents working in `sqlfluff-plugin-conventions/`.
 ## What this is
 
 A SQLFluff plugin of config-driven team conventions. It is the home for the
-rule engine that used to live in `databricks_sql_parser` (then `dbsqlparse`)
-and was removed when that project's parser was retired. That history is the
-spec: `git show 66e915f^:src/dbsqlparse/rules/` and `tests/test_rules.py` in
-the `databricks_sql_parser` repo. Do not revive the parser; this plugin is
-what carries that work forward.
+rule engine that used to live in the corpus repo (local dir
+`databricks_sql_parser/` at the time, since renamed `databricks-sql-corpus/`;
+package `dbsqlparse`) and was removed when that project's parser was retired.
+That history is the spec: `git show 66e915f^:src/dbsqlparse/rules/` and
+`tests/test_rules.py` in `taslater/databricks-sql-corpus`. Do not revive the
+parser; this plugin is what carries that work forward.
 
 Org-specific rules belong in a plugin, not SQLFluff core — their CONTRIBUTING
 says so. Nothing here is proposed upstream.
@@ -166,8 +167,8 @@ repo needs a secret.
 
 `DROP MATERIALIZED VIEW` is unparsable in SQLFluff's `databricks` dialect as
 of 4.3.0 (found 2026-09-18 by `test_semantics.py`). That is dialect work, not
-plugin work — it belongs in the `databricks_sql_parser` gap queue and an
-upstream PR, not a workaround here.
+plugin work — it belongs in the `databricks-sql-corpus` gap queue
+(`docs/gaps.md`) and an upstream PR, not a workaround here.
 
 ## Standing constraints
 

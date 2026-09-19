@@ -30,7 +30,7 @@ CONTROL_EXPECTED = {"Conventions_N001", "Conventions_A001"}
 
 DEFAULT_CORPUS = (
     pathlib.Path(__file__).resolve().parents[2]
-    / "databricks_sql_parser"
+    / "databricks-sql-corpus"
     / "corpus"
     / "cache"
 )
