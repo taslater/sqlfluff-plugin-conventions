@@ -252,15 +252,22 @@ the package: it changes only with a minor release.
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ../sqlfluff -e ".[dev]"   # fork checkout, or any sqlfluff
-.venv/bin/python -m pytest --cov=sqlfluff_plugin_conventions --cov-fail-under=96
+.venv/bin/python -m pytest --cov=sqlfluff_plugin_conventions --cov-fail-under=100
 .venv/bin/ruff check src/ test/ scripts/
 .venv/bin/mypy
+.venv/bin/mutmut run && .venv/bin/python scripts/mutation_score.py --floor 75
 .venv/bin/sqlfluff rules | grep Conventions
 ```
 
-CI runs the same checks plus a pinned `sqlfluff==4.3.0` floor job, a
-`pip-audit` dependency audit, and SHA-pinned actions kept current by
-Dependabot. Releases are published with PEP 740 provenance attestations.
+Test line and branch coverage are held at **100% with no pragmas**, and
+mutation testing runs weekly (and on PRs touching `src/`) with a 75% floor
+that ratchets upward — the remaining survivors are listed by the job so they
+can be burnt down deliberately. The dev toolchain is hash-pinned in
+`requirements-dev.txt` (`pip-compile --allow-unsafe --generate-hashes --extra dev`); CI
+installs from it, so a compromised or yanked dependency cannot silently
+change a build. CodeQL and OpenSSF Scorecard run on every push, releases
+carry an SPDX SBOM and PEP 740 provenance attestations, and the dependency
+tree is audited with `pip-audit`.
 
 The rule tests are YAML cases under `test/rules/test_cases/`, one file per
 rule, using SQLFluff's own `sqlfluff.utils.testing` harness.

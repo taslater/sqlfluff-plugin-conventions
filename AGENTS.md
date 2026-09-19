@@ -18,10 +18,11 @@ says so. Nothing here is proposed upstream.
 
 ```bash
 .venv/bin/python -m pytest                       # tests, seconds
-.venv/bin/python -m pytest --cov=sqlfluff_plugin_conventions
+.venv/bin/python -m pytest --cov=sqlfluff_plugin_conventions --cov-fail-under=100
 .venv/bin/ruff check src/ test/ scripts/
 .venv/bin/ruff format src/ test/ scripts/
 .venv/bin/mypy                                   # config in pyproject
+.venv/bin/mutmut run                             # then scripts/mutation_score.py
 .venv/bin/sqlfluff rules | grep Conventions     # discovery smoke test
 .venv/bin/python scripts/corpus_check.py --config examples/snake-case-team.sqlfluff
 ```
@@ -108,17 +109,39 @@ deliberately not attempted; a target not created in the file is ignored.
 - `test/test_quality.py` guards shipping properties: every config keyword is
   documented and defaulted, docstrings conform, unparsable input cannot crash
   the model, `fix` is a no-op, and the CLI exits non-zero on a broken scorer.
+  It also runs a malformed-SQL battery against every rule.
+- `test/test_integration.py` drives the CLI: exact violation positions and
+  descriptions, determinism across hash seeds, parent-directory config
+  discovery, `--rules`, `noqa`, JSON output, and a two-process parallel run.
+- `test/test_golden.py` is deliberately brittle: all 18 rules fire on one
+  file and every diagnostic word is pinned. When it fails, the question is
+  "did the wording change on purpose?", then update it.
+- `test/test_properties.py` encodes invariants with Hypothesis: parsers never
+  drop input or raise anything but `SQLFluffUserError`, scores pass through
+  or are rejected, table matching never guesses, token soup never crashes.
+- `test/test_security.py` vetoes sockets and subprocesses around scorer
+  loading, evaluation, and a full lint.
 - `scripts/corpus_check.py` measures noise on real SQL and **always lints a
   deliberately broken control first**. A harness bug that loads no rules
   would otherwise report a clean sweep. Learn from the three times that
   happened in the sibling corpus project.
 
-**Mypy and coverage are gates.** The package ships `py.typed` and the public
-API (`semantics.py`, `scoring.py`) is typed; keep `mypy` clean under the
-config in `pyproject.toml` and do not lower the coverage floor.
+**Coverage is 100% line and branch with zero pragmas.** Unreachable branches
+get deleted, not covered; where a branch exists only because the parse tree
+guarantees a shape, use an `assert` with the guarantee named, and prove the
+no-crash property with the malformed-SQL battery and the Hypothesis soup
+test. Never add a pragma to hit the gate.
 
-**Actions are SHA-pinned**, Dependabot updates them, and releases carry PEP
-740 attestations. Do not replace pinned SHAs with version tags.
+**Mypy, ruff and mutation are gates.** The package ships `py.typed`; keep
+`mypy` clean under the config in `pyproject.toml`. Mutation testing runs
+weekly and on `src/` PRs with a floor that only ratchets upward — if it
+fails, kill the survivors with tests or document them as equivalent, never
+lower the floor.
+
+**Actions are SHA-pinned** with version comments, Dependabot updates them,
+and releases carry PEP 740 attestations and an SPDX SBOM. The dev toolchain
+is hash-pinned in `requirements-dev.txt`; regenerate with
+`pip-compile --allow-unsafe --generate-hashes --extra dev --output-file requirements-dev.txt pyproject.toml`.
 
 ## Known gaps found here
 

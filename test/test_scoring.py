@@ -106,7 +106,7 @@ def test_missing_attribute(tmp_path):
 def test_non_callable_attribute(tmp_path):
     path = tmp_path / "scorers.py"
     path.write_text("value = 3\n")
-    with pytest.raises(SQLFluffUserError, match="not\\s+callable"):
+    with pytest.raises(SQLFluffUserError, match=r"not\s+callable"):
         load_scorer(f"{path}:value")
 
 
@@ -209,7 +209,7 @@ def test_boolean_return_is_rejected(tmp_path):
 
 def test_raising_scorer_fails_with_its_name(tmp_path):
     scorer = load_from_source(tmp_path, RAISING_SCORER, name="broken")
-    with pytest.raises(SQLFluffUserError, match="broken.*RuntimeError"):
+    with pytest.raises(SQLFluffUserError, match=r"broken.*RuntimeError"):
         score_comment(CommentContext(comment="x"), scorer)
 
 
@@ -390,3 +390,24 @@ def test_colon_with_empty_side_is_rejected():
         load_scorer("module:")
     with pytest.raises(SQLFluffUserError, match="module:function"):
         load_scorer(":function")
+
+
+def test_relative_module_spec_is_a_config_error():
+    with pytest.raises(SQLFluffUserError, match="could not be imported"):
+        load_scorer("..:score")
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
+def test_file_scorer_lockdown_truthy_values(monkeypatch, tmp_path, value):
+    path = tmp_path / "scorers.py"
+    path.write_text("def score(comment):\n    return 1.0\n")
+    monkeypatch.setenv(NO_FILE_SCORERS_ENV, value)
+    with pytest.raises(SQLFluffUserError, match="is set"):
+        load_scorer(f"{path}:score")
+
+
+def test_file_scorer_lockdown_falsy_value_is_off(monkeypatch, tmp_path):
+    path = tmp_path / "scorers.py"
+    path.write_text("def score(comment):\n    return 1.0\n")
+    monkeypatch.setenv(NO_FILE_SCORERS_ENV, "0")
+    assert load_scorer(f"{path}:score").name.endswith(":score")

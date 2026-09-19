@@ -245,3 +245,11 @@ def test_unloadable_scorer_is_a_config_error():
             "conventions.comment_quality",
             _scorer_config(comment_score_function="no_such_module:score"),
         )
+
+
+def test_parse_mapping_readable_splits_on_the_first_equals_by_default():
+    from sqlfluff_plugin_conventions.config import parse_mapping
+
+    # Only regex_keys uses rpartition; plain mappings keep "=" in the value.
+    assert parse_mapping("a=x=y") == {"a": "x=y"}
+    assert parse_mapping("^(?=x)=reason", regex_keys=True) == {"^(?=x)": "reason"}

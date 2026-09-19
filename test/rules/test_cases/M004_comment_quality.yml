@@ -95,3 +95,25 @@ duplicate_comments_are_penalised:
         id BIGINT COMMENT 'Surrogate key from the identity pool',
         backup_id BIGINT COMMENT 'Surrogate key from the identity pool'
     )
+
+table_comment_above_threshold_passes:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:word_count"
+        comment_score_threshold: 0.6
+        comment_score_columns: False
+        comment_score_tables: True
+  pass_str: CREATE TABLE users (id BIGINT) COMMENT 'Registered account holders'
+
+score_exactly_at_threshold_passes:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.comment_quality:
+        comment_score_function: "sqlfluff_plugin_conventions.example_scorers:word_count"
+        comment_score_threshold: 0.75
+  pass_str: CREATE TABLE users (id BIGINT COMMENT 'surrogate key pool')

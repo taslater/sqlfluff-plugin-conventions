@@ -31,3 +31,23 @@ inert_without_patterns:
     core:
       dialect: databricks
   pass_str: CREATE TABLE orders_tmp (id_tmp INT)
+
+tables_can_be_exempt:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.forbidden_name:
+        forbidden_patterns: "_tmp$=use _scratch instead"
+        forbidden_columns: True
+        forbidden_tables: False
+  pass_str: CREATE TABLE orders_tmp (id INT)
+
+empty_reason_omits_the_hint:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.forbidden_name:
+        forbidden_patterns: '{"_tmp$": ""}'
+  fail_str: CREATE TABLE t (id_tmp INT)

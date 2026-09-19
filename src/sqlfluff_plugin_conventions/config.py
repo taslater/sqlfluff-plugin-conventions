@@ -39,8 +39,7 @@ def parse_list(value: Any) -> list[str]:
             raise SQLFluffUserError(
                 f"Expected a JSON array or a comma-separated list, got {text!r} ({exc})"
             ) from exc
-        if not isinstance(loaded, list):
-            raise SQLFluffUserError(f"Expected a JSON array, got {text!r}")
+        # A string starting with "[" can only parse as a JSON array.
         return [str(item) for item in loaded]
     if text.startswith("{"):
         raise SQLFluffUserError(
@@ -68,8 +67,7 @@ def parse_mapping(value: Any, *, regex_keys: bool = False) -> dict[str, str]:
                 f"Expected a JSON object or 'KEY=value, KEY=value' entries, "
                 f"got {text!r} ({exc})"
             ) from exc
-        if not isinstance(loaded, dict):
-            raise SQLFluffUserError(f"Expected a JSON object, got {text!r}")
+        # A string starting with "{" can only parse as a JSON object.
         return {str(key): str(val) for key, val in loaded.items()}
     if text.startswith("["):
         raise SQLFluffUserError(

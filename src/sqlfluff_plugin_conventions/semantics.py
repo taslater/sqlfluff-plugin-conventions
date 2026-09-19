@@ -19,6 +19,7 @@ dataclasses below and depend on them; they change only with a minor version.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from sqlfluff.core.parser import BaseSegment
 
@@ -181,39 +182,31 @@ def _unquote(raw: str) -> str:
     return text
 
 
-def _identifier_in(seg: BaseSegment | None) -> BaseSegment | None:
+def _identifier_in(seg: BaseSegment) -> BaseSegment:
     """The identifier segment naming a column, unwrapping references."""
-    if seg is None:
-        return None
     named = list(seg.recursive_crawl("naked_identifier", "quoted_identifier"))
-    if named:
-        return named[-1]
-    return seg
+    return named[-1] if named else seg
 
 
-def _name_segment(seg: BaseSegment) -> BaseSegment | None:
-    """The first column-name child of a definition or view column list item."""
-    for child in seg.segments:
-        if child.is_type("column_reference", "naked_identifier", "quoted_identifier"):
-            return _identifier_in(child)
-    return None
+def _next_literal_after(parent: BaseSegment, keyword: BaseSegment) -> BaseSegment:
+    """The first literal sibling after ``keyword`` within ``parent``.
 
-
-def _next_literal_after(
-    parent: BaseSegment, keyword: BaseSegment
-) -> BaseSegment | None:
-    """The first literal sibling after ``keyword`` within ``parent``."""
-    seen = False
-    for child in parent.segments:
-        if child is keyword:
-            seen = True
-            continue
-        if not seen or child.is_type(*_META_TYPES):
-            continue
-        if child.is_type("quoted_literal", "literal", "naked_identifier"):
-            return child
-        return None
-    return None
+    A ``COMMENT`` keyword in a parsed tree always carries a value; a malformed
+    one becomes an ``unparsable`` node instead, so the asserts below are
+    invariants, not guesses.
+    """
+    index = parent.segments.index(keyword)
+    following = [
+        child
+        for child in parent.segments[index + 1 :]
+        if not child.is_type(*_META_TYPES)
+    ]
+    assert following, "a COMMENT keyword always carries a value"
+    literal = following[0]
+    assert literal.is_type("quoted_literal", "literal", "naked_identifier"), (
+        "a COMMENT value is always a literal"
+    )
+    return literal
 
 
 def _find_comment(seg: BaseSegment, skip: tuple[str, ...]) -> str | None:
@@ -227,9 +220,7 @@ def _find_comment(seg: BaseSegment, skip: tuple[str, ...]) -> str | None:
         if child.is_type(*skip):
             continue
         if child.is_type("keyword") and child.raw_upper == "COMMENT":
-            literal = _next_literal_after(seg, child)
-            if literal is not None:
-                return _unquote(literal.raw)
+            return _unquote(_next_literal_after(seg, child).raw)
         if child.segments:
             found = _find_comment(child, skip)
             if found is not None:
@@ -237,34 +228,24 @@ def _find_comment(seg: BaseSegment, skip: tuple[str, ...]) -> str | None:
     return None
 
 
-def _comment_in_clause(clause: BaseSegment) -> str | None:
-    """The value of a ``comment_clause`` or bare COMMENT keyword sequence."""
-    if clause.is_type("keyword"):
-        return None
-    literal = next(clause.recursive_crawl("quoted_literal"), None)
-    return _unquote(literal.raw) if literal is not None else None
-
-
 def _has_if_exists(seg: BaseSegment) -> bool:
     keywords = [child.raw_upper for child in seg.segments if child.is_type("keyword")]
     return "IF" in keywords and "EXISTS" in keywords
 
 
-def _keywords(seg: BaseSegment, skip: tuple[str, ...] = ()) -> list[str]:
-    """Uppercased keyword children anywhere under ``seg``, minus skip."""
+def _keywords(seg: BaseSegment) -> list[str]:
+    """Uppercased keyword children anywhere under ``seg``."""
     found: list[str] = []
     for child in seg.segments:
-        if child.is_type(*skip):
-            continue
         if child.is_type("keyword"):
             found.append(child.raw_upper)
         if child.segments:
-            found.extend(_keywords(child, skip))
+            found.extend(_keywords(child))
     return found
 
 
-def _has_keywords(seg: BaseSegment, *words: str, skip: tuple[str, ...] = ()) -> bool:
-    keywords = _keywords(seg, skip)
+def _has_keywords(seg: BaseSegment, *words: str) -> bool:
+    keywords = _keywords(seg)
     return all(word in keywords for word in words)
 
 
@@ -272,27 +253,24 @@ def _has_partitioned_by(stmt: BaseSegment) -> bool:
     keywords = [child.raw_upper for child in stmt.segments if child.is_type("keyword")]
     return any(
         first == "PARTITIONED" and second == "BY"
-        for first, second in zip(keywords, keywords[1:])
+        for first, second in pairwise(keywords)
     )
 
 
 def _has_adjacent_keywords(seg: BaseSegment, first: str, second: str) -> bool:
     """Whether ``first`` is immediately followed by ``second`` as keywords."""
     keywords = [child.raw_upper for child in seg.segments if child.is_type("keyword")]
-    return any(
-        one == first and two == second for one, two in zip(keywords, keywords[1:])
-    )
+    return any(one == first and two == second for one, two in pairwise(keywords))
 
 
 def _column_is_not_null(seg: BaseSegment) -> bool:
     """True when NOT NULL is written as a constraint, not inside an expression.
 
-    Only direct keyword children and the named constraint/properties subtrees
-    are inspected, so a DEFAULT expression, a CHECK expression or a string
-    literal containing those words cannot falsely satisfy the requirement.
+    Only the named constraint and properties subtrees are inspected, so a
+    DEFAULT expression, a CHECK expression or a string literal containing
+    those words cannot falsely satisfy the requirement. Every dialect seen so
+    far puts the constraint in one of those two segments.
     """
-    if _has_adjacent_keywords(seg, "NOT", "NULL"):
-        return True
     return any(
         _has_adjacent_keywords(child, "NOT", "NULL")
         for child in seg.segments
@@ -315,8 +293,7 @@ def _table_has_primary_key(stmt: BaseSegment) -> bool:
 
 def _table_name(stmt: BaseSegment) -> str:
     ref = stmt.get_child("table_reference")
-    if ref is None:
-        return ""
+    assert ref is not None, "create statements always name their object"
     return _unquote(ref.raw)
 
 
@@ -336,24 +313,16 @@ def _table_provider(stmt: BaseSegment) -> str | None:
     if clause is None:
         return None
     fmt = clause.get_child("data_source_format")
-    if fmt is not None:
-        return fmt.raw.strip().strip("`").lower() or None
-    items = _visible(clause)
-    if items and items[0].is_type("keyword") and items[0].raw_upper == "USING":
-        items = items[1:]
-    provider = " ".join(item.raw for item in items).strip().strip("`").lower()
-    return provider or None
+    assert fmt is not None, "USING is always followed by a data source format"
+    return fmt.raw.strip().strip("`").lower() or None
 
 
 def _table_properties(stmt: BaseSegment) -> dict[str, str]:
     items = _visible(stmt)
     for index, child in enumerate(items):
         if child.is_type("keyword") and child.raw_upper == "TBLPROPERTIES":
-            rest = items[index + 1 :]
-            bracketed = rest[0] if rest else None
-            if bracketed is not None and bracketed.is_type("bracketed"):
-                return _parse_property_bracket(bracketed)
-            return {}
+            assert index + 1 < len(items), "TBLPROPERTIES always carries a list"
+            return _parse_property_bracket(items[index + 1])
     return {}
 
 
@@ -364,14 +333,12 @@ def _parse_property_bracket(bracketed: BaseSegment) -> dict[str, str]:
     while index < len(items):
         item = items[index]
         if item.is_type("property_name_identifier"):
-            key = _unquote(item.raw)
-            cursor = index + 1
-            if cursor < len(items) and items[cursor].is_type("comparison_operator"):
-                cursor += 1
-            value = _unquote(items[cursor].raw) if cursor < len(items) else ""
-            props[key] = value
-            index = cursor
-        index += 1
+            assert index + 2 < len(items), "properties are name = value triples"
+            assert items[index + 1].is_type("comparison_operator")
+            props[_unquote(item.raw)] = _unquote(items[index + 2].raw)
+            index += 3
+        else:
+            index += 1
     return props
 
 
@@ -421,13 +388,15 @@ def _view_columns(stmt: BaseSegment, table: Table) -> None:
             ):
                 name_seg = _identifier_in(item)
                 current = Column(
-                    name=_unquote(name_seg.raw) if name_seg else _unquote(item.raw),
-                    segment=name_seg or item,
+                    name=_unquote(name_seg.raw),
+                    segment=name_seg,
                     origin="declaration",
                 )
                 table.columns.append(current)
             elif item.is_type("comment_clause") and current is not None:
-                current.comment = _comment_in_clause(item)
+                literal = next(item.recursive_crawl("quoted_literal"), None)
+                assert literal is not None, "COMMENT clauses always carry a value"
+                current.comment = _unquote(literal.raw)
         break
 
 
@@ -461,8 +430,6 @@ def _match_table(tables: list[Table], name: str) -> Table | None:
     coin-flip.
     """
     target = name.strip().casefold()
-    if not target:
-        return None
     exact = [table for table in tables if table.name.casefold() == target]
     if exact:
         return exact[0]
@@ -526,8 +493,6 @@ def _apply_comment_assignments(tree: BaseSegment, analysis: Analysis) -> None:
         kind, reference, literal = target
         value = _unquote(literal.raw)
         parts = _reference_parts(reference)
-        if not parts:
-            continue
         if kind == "column":
             if len(parts) < 2:
                 continue
@@ -548,8 +513,9 @@ def _apply_comment_assignments(tree: BaseSegment, analysis: Analysis) -> None:
         table_ref = stmt.get_child("table_reference")
         column_ref = next(stmt.recursive_crawl("column_reference"), None)
         comment_literal = next(stmt.recursive_crawl("quoted_literal"), None)
-        if table_ref is None or column_ref is None or comment_literal is None:
-            continue
+        assert table_ref is not None, "ALTER TABLE always names its target"
+        assert column_ref is not None, "ALTER COLUMN always names a column"
+        assert comment_literal is not None, "ALTER COLUMN COMMENT always has a value"
         table = _match_table(analysis.tables, _unquote(table_ref.raw))
         parts = _reference_parts(column_ref)
         if table is not None and parts:
@@ -585,27 +551,29 @@ def _walk(seg: BaseSegment, table: Table | None, analysis: Analysis) -> None:
             _view_columns(seg, table)
 
     elif seg.is_type("column_definition"):
-        name_seg = _name_segment(seg)
-        if name_seg is not None:
-            data_type = seg.get_child("data_type")
-            raw_type = data_type.raw if data_type is not None else None
-            constraint = next(seg.recursive_crawl("column_constraint_segment"), None)
-            column = Column(
-                name=_unquote(name_seg.raw),
-                segment=name_seg,
-                data_type=canonical_type(raw_type),
-                raw_type=raw_type,
-                comment=_find_comment(seg, ("data_type",)),
-                origin="declaration",
-                primary_key=(
-                    constraint is not None
-                    and _has_keywords(constraint, "PRIMARY", "KEY")
-                ),
-                not_null=_column_is_not_null(seg),
-            )
-            analysis.columns.append(column)
-            if table is not None:
-                table.columns.append(column)
+        name_ref = seg.get_child(
+            "column_reference", "naked_identifier", "quoted_identifier"
+        )
+        assert name_ref is not None, "column definitions always name a column"
+        name_seg = _identifier_in(name_ref)
+        data_type = seg.get_child("data_type")
+        raw_type = data_type.raw if data_type is not None else None
+        constraint = next(seg.recursive_crawl("column_constraint_segment"), None)
+        column = Column(
+            name=_unquote(name_seg.raw),
+            segment=name_seg,
+            data_type=canonical_type(raw_type),
+            raw_type=raw_type,
+            comment=_find_comment(seg, ("data_type",)),
+            origin="declaration",
+            primary_key=(
+                constraint is not None and _has_keywords(constraint, "PRIMARY", "KEY")
+            ),
+            not_null=_column_is_not_null(seg),
+        )
+        analysis.columns.append(column)
+        if table is not None:
+            table.columns.append(column)
 
     elif seg.is_type("select_clause_element"):
         alias = seg.get_child("alias_expression")

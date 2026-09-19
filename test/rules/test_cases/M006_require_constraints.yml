@@ -46,3 +46,6 @@ inert_by_default:
     core:
       dialect: databricks
   pass_str: CREATE TABLE users (id BIGINT)
+
+columnless_table_is_skipped:
+  pass_str: CREATE TABLE t AS SELECT 1

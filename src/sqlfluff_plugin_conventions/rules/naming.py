@@ -359,8 +359,6 @@ class Rule_Conventions_N006(ConventionsRule, BaseRule):
             return None
         results = []
         for table in self._analysis(context).tables:
-            if not table.name:
-                continue
             parts = table.name.split(".")
             if len(parts) < minimum:
                 results.append(

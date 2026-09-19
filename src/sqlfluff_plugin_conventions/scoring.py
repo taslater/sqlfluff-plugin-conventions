@@ -165,7 +165,9 @@ def _resolve_attr(module: Any, attr: str, source: str) -> Callable[..., Any]:
 def _load_from_module(module_name: str, attr: str) -> Callable[..., Any]:
     try:
         module = importlib.import_module(module_name)
-    except ImportError as exc:
+    # TypeError/ValueError cover relative-import shapes ("..") and empty
+    # names, which are config typos, not crashes.
+    except (ImportError, TypeError, ValueError) as exc:
         raise SQLFluffUserError(
             f"Comment scorer module {module_name!r} could not be imported: {exc}"
         ) from exc
@@ -180,7 +182,7 @@ def _load_from_file(path_text: str, attr: str) -> Callable[..., Any]:
         raise SQLFluffUserError(f"Comment scorer file {str(path)!r} does not exist")
     module_name = (
         "_sqlfluff_conventions_scorer_"
-        + hashlib.sha1(str(path).encode()).hexdigest()[:12]
+        + hashlib.sha1(str(path).encode(), usedforsecurity=False).hexdigest()[:12]
     )
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:  # pragma: no cover - defensive

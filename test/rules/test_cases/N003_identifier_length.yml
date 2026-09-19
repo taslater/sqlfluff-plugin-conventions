@@ -23,3 +23,12 @@ inert_at_zero:
       conventions.identifier_length:
         max_identifier_length: 0
   pass_str: CREATE TABLE t (a_column_name_far_too_long INT)
+
+exactly_sixteen_characters_passes:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.identifier_length:
+        max_identifier_length: 16
+  pass_str: CREATE TABLE t (sixteen_chars_16 INT)

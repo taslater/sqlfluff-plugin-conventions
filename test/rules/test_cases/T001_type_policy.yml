@@ -50,3 +50,15 @@ inert_without_policy:
     core:
       dialect: databricks
   pass_str: CREATE TABLE payments (amount FLOAT)
+
+untyped_alias_column_is_skipped:
+  pass_str: SELECT total AS revenue FROM t
+
+empty_reason_is_allowed:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_policy:
+        forbidden_types: '{"FLOAT": ""}'
+  fail_str: CREATE TABLE payments (amount FLOAT)

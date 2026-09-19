@@ -184,3 +184,36 @@ def test_cli_fails_loudly_on_a_broken_scorer(tmp_path):
     output = process.stdout + process.stderr
     assert "Comment scorer" in output
     assert "broken" in output
+
+
+MALFORMED_SQL = [
+    "SELECT FROM WHERE",
+    "CREATE TABLE",
+    "CREATE TABLE t (",
+    "CREATE TABLE t (a INT COMMENT)",
+    "CREATE VIEW",
+    "DROP",
+    "INSERT INTO",
+    "DELETE FROM",
+    "UPDATE SET",
+    "ALTER TABLE t ALTER COLUMN",
+    "COMMENT ON",
+    "CREATE TABLE t (a INT) TBLPROPERTIES",
+    "CREATE TABLE t (a INT) TBLPROPERTIES ('k')",
+    "GRANT SELECT ON",
+    "WITH x AS (SELECT",
+    "CREATE TABLE t (a INT) USING",
+    "CREATE MATERIALIZED VIEW (",
+]
+
+
+def test_malformed_sql_never_crashes_a_rule():
+    """Parse-recovery trees are where grammar invariants meet reality."""
+    codes = ",".join(rule.code for rule in plugin_rules())
+    config = FluffConfig(overrides={"dialect": "databricks", "rules": codes})
+    linter = Linter(config=config)
+    # Sanity: the battery is genuinely malformed.
+    assert linter.lint_string("CREATE TABLE (").violations
+    for sql in MALFORMED_SQL:
+        result = linter.lint_string(sql)
+        assert result.violations is not None

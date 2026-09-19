@@ -28,5 +28,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Requires SQLFluff 4.3.0 or newer; the test suite runs against that floor
   and the latest release.
 - Mypy runs in CI; the codebase is type-clean under SQLFluff's own option set.
-- CI adds a 96% coverage gate, a dependency audit, and SHA-pinned actions;
-  releases are published with PEP 740 provenance attestations.
+- Line and branch coverage are held at 100% with no pragmas; unreachable
+  code was deleted rather than excluded.
+- Mutation testing (mutmut) runs weekly and on `src/` PRs with a ratcheting
+  floor; survivors are printed for triage.
+- CI adds SHA-pinned actions, a hash-pinned dev lockfile, a dependency audit,
+  CodeQL, OpenSSF Scorecard, and an SBOM on release; releases are published
+  with PEP 740 provenance attestations.
+- Property-based, integration, security-veto and golden-description tests
+  were added, including a malformed-SQL battery for every rule.

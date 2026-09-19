@@ -338,3 +338,59 @@ def test_quoted_identifier_with_a_dot_does_not_crash():
     analysis = model("CREATE TABLE `my.schema` (a INT)")
     assert analysis.tables[0].name == "my.schema"
     assert analysis.tables[0].columns[0].name == "a"
+
+
+def test_add_columns_contributes_columns_without_a_created_table():
+    analysis = model("ALTER TABLE t ADD COLUMNS (c INT)")
+    assert [column.name for column in analysis.columns] == ["c"]
+    assert analysis.tables == []
+
+
+def test_analyse_none_returns_an_empty_model():
+    result = analyse(None)
+    assert result.tables == []
+    assert result.columns == []
+    assert result.select_stars == []
+
+
+def test_function_call_alias_is_not_a_cast():
+    analysis = model("SELECT upper(name) AS n FROM t")
+    assert analysis.columns[0].origin == "alias"
+    assert analysis.columns[0].data_type is None
+
+
+def test_comment_on_database_is_ignored():
+    analysis = model("CREATE TABLE t (id INT); COMMENT ON DATABASE db IS 'x'")
+    assert analysis.tables[0].comment is None
+
+
+def test_comment_on_single_part_column_is_ignored():
+    analysis = model("CREATE TABLE t (id INT); COMMENT ON COLUMN id IS 'x'")
+    assert analysis.tables[0].columns[0].comment is None
+
+
+def test_comment_targeting_missing_column_is_a_no_op():
+    analysis = model("CREATE TABLE t (id INT); COMMENT ON COLUMN t.nope IS 'x'")
+    assert analysis.tables[0].columns[0].comment is None
+
+
+def test_comment_targets_the_right_column_among_several():
+    analysis = model(
+        "CREATE TABLE t (id INT, name STRING);"
+        "COMMENT ON COLUMN t.name IS 'display name'"
+    )
+    by_name = {column.name: column for column in analysis.tables[0].columns}
+    assert by_name["id"].comment is None
+    assert by_name["name"].comment == "display name"
+
+
+def test_alter_without_comment_is_ignored():
+    analysis = model("CREATE TABLE t (id INT); ALTER TABLE t SET TAGS ('pii' = 'true')")
+    assert analysis.tables[0].columns[0].comment is None
+
+
+def test_alter_on_uncreated_table_is_ignored():
+    analysis = model(
+        "CREATE TABLE t (id INT);ALTER TABLE other ALTER COLUMN id COMMENT 'surrogate'"
+    )
+    assert analysis.tables[0].columns[0].comment is None
