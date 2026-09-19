@@ -35,7 +35,7 @@ def load_default_config() -> dict[str, Any]:
 
 
 @hookimpl
-def get_configs_info() -> dict[str, dict[str, ConfigInfo]]:
+def get_configs_info() -> dict[str, ConfigInfo]:
     """Return validation and documentation for the plugin's config keys."""
     from sqlfluff_plugin_conventions.config_info import CONFIGS_INFO
 

@@ -42,6 +42,11 @@ def parse_list(value: Any) -> list[str]:
         if not isinstance(loaded, list):
             raise SQLFluffUserError(f"Expected a JSON array, got {text!r}")
         return [str(item) for item in loaded]
+    if text.startswith("{"):
+        raise SQLFluffUserError(
+            f"Expected a JSON array or a comma-separated list, got a JSON "
+            f"object: {text!r}"
+        )
     return [part.strip() for part in text.split(",") if part.strip()]
 
 
@@ -66,6 +71,11 @@ def parse_mapping(value: Any, *, regex_keys: bool = False) -> dict[str, str]:
         if not isinstance(loaded, dict):
             raise SQLFluffUserError(f"Expected a JSON object, got {text!r}")
         return {str(key): str(val) for key, val in loaded.items()}
+    if text.startswith("["):
+        raise SQLFluffUserError(
+            f"Expected a JSON object or 'KEY=value, KEY=value' entries, got a "
+            f"JSON array: {text!r}"
+        )
 
     parsed: dict[str, str] = {}
     for entry in text.split(","):

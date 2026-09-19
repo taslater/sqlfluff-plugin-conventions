@@ -12,7 +12,7 @@ import re
 
 from sqlfluff.core.errors import SQLFluffUserError
 from sqlfluff.core.rules import RuleContext
-from sqlfluff.core.rules.crawlers import RootOnlyCrawler
+from sqlfluff.core.rules.crawlers import BaseCrawler, RootOnlyCrawler
 
 from sqlfluff_plugin_conventions.semantics import Analysis, analyse
 
@@ -25,7 +25,10 @@ class ConventionsRule:
     knowledge confined to ``semantics.py`` instead of spread across rules.
     """
 
-    crawl_behaviour = RootOnlyCrawler()
+    # Annotated with the same type as BaseRule's attribute because multiple
+    # inheritance requires the definitions to agree; the narrower inferred
+    # type would otherwise conflict.
+    crawl_behaviour: BaseCrawler = RootOnlyCrawler()
     is_fix_compatible = False
 
     def _analysis(self, context: RuleContext) -> Analysis:

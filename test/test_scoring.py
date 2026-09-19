@@ -14,7 +14,13 @@ import textwrap
 import pytest
 from sqlfluff.core.errors import SQLFluffUserError
 
+from sqlfluff_plugin_conventions.example_scorers import (
+    no_placeholder,
+    specificity,
+    word_count,
+)
 from sqlfluff_plugin_conventions.scoring import (
+    NO_FILE_SCORERS_ENV,
     CommentContext,
     CommentScore,
     load_scorer,
@@ -227,3 +233,160 @@ def test_comment_score_notes_are_preserved(tmp_path):
     result = score_comment(CommentContext(comment="x"), scorer)
     assert result == CommentScore(0.4, "because")
     assert math.isclose(result.value, 0.4)
+
+
+# --- example scorers ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "comment,expected",
+    [
+        ("", 0.0),
+        ("one", 0.2),
+        ("one two", 0.5),
+        ("one two three", 0.75),
+        ("one two three four", 1.0),
+    ],
+)
+def test_example_word_count(comment, expected):
+    assert word_count(comment) == expected
+
+
+@pytest.mark.parametrize("comment", ["TODO", "tbd", "N/A", "none", "..."])
+def test_example_no_placeholder_rejects_placeholders(comment):
+    assert no_placeholder(comment) == 0.0
+
+
+def test_example_no_placeholder_accepts_content():
+    assert no_placeholder("Primary contact address") == 1.0
+
+
+def test_example_specificity_restating_the_name_scores_zero():
+    result = specificity(CommentContext(comment="the id", name="id"))
+    assert result.value == 0.0
+
+
+def test_example_specificity_duplicates_are_capped():
+    result = specificity(
+        CommentContext(
+            comment="Surrogate key from the identity pool",
+            name="id",
+            duplicates=1,
+        )
+    )
+    assert result.value <= 0.2
+
+
+def test_example_specificity_needs_content_words():
+    result = specificity(CommentContext(comment="the a", name="x"))
+    assert result.value == 0.0
+    assert "content" in result.notes
+
+
+# --- loader robustness -------------------------------------------------------
+
+
+def test_entry_point_with_malformed_value_is_rejected(monkeypatch):
+    import sqlfluff_plugin_conventions.scoring as scoring_module
+
+    monkeypatch.setattr(
+        scoring_module, "_entry_points", lambda: {"bad": "no_colon_here"}
+    )
+    with pytest.raises(SQLFluffUserError, match="unexpected value"):
+        load_scorer("bad")
+
+
+def test_failed_file_import_is_not_left_in_sys_modules(tmp_path):
+    path = tmp_path / "broken.py"
+    path.write_text("raise RuntimeError('nope')\n")
+    before = set(sys.modules)
+    with pytest.raises(SQLFluffUserError, match="raised while importing"):
+        load_scorer(f"{path}:anything")
+    added = set(sys.modules) - before
+    assert not any(name.startswith("_sqlfluff_conventions_scorer_") for name in added)
+
+
+def test_repeated_loads_are_stable(tmp_path):
+    path = tmp_path / "scorers.py"
+    path.write_text("def score(comment):\n    return 0.5\n")
+    first = load_scorer(f"{path}:score")
+    second = load_scorer(f"{path}:score")
+    assert score_comment(CommentContext(comment="x"), first).value == 0.5
+    assert score_comment(CommentContext(comment="x"), second).value == 0.5
+
+
+def test_file_scorers_can_be_refused(monkeypatch, tmp_path):
+    path = tmp_path / "scorers.py"
+    path.write_text("def score(comment):\n    return 1.0\n")
+    monkeypatch.setenv(NO_FILE_SCORERS_ENV, "1")
+    with pytest.raises(SQLFluffUserError, match="is set"):
+        load_scorer(f"{path}:score")
+    scorer = load_scorer("sqlfluff_plugin_conventions.example_scorers:word_count")
+    assert (
+        score_comment(CommentContext(comment="a decent comment indeed"), scorer).value
+        == 1.0
+    )
+
+
+def test_file_scorer_lockdown_is_off_by_default(monkeypatch, tmp_path):
+    path = tmp_path / "scorers.py"
+    path.write_text("def score(comment):\n    return 1.0\n")
+    monkeypatch.delenv(NO_FILE_SCORERS_ENV, raising=False)
+    assert load_scorer(f"{path}:score").name.endswith(":score")
+
+
+def test_star_args_scorer_is_rejected(tmp_path):
+    path = tmp_path / "scorers.py"
+    path.write_text("def score(*args):\n    return 1.0\n")
+    with pytest.raises(SQLFluffUserError, match=r"not \*args"):
+        load_scorer(f"{path}:score")
+
+
+def test_uninspectable_scorer_is_rejected(monkeypatch):
+    import sqlfluff_plugin_conventions.scoring as scoring_module
+
+    def broken_signature(function):
+        raise ValueError("nope")
+
+    monkeypatch.setattr(scoring_module.inspect, "signature", broken_signature)
+    with pytest.raises(SQLFluffUserError, match="no inspectable signature"):
+        scoring_module._uses_context(lambda comment: 1.0, "test")
+
+
+def test_entry_points_are_read_from_metadata(monkeypatch):
+    from types import SimpleNamespace
+
+    import sqlfluff_plugin_conventions.scoring as scoring_module
+
+    monkeypatch.setattr(
+        scoring_module.importlib.metadata,
+        "entry_points",
+        lambda group=None: [
+            SimpleNamespace(
+                name="mine",
+                value=("sqlfluff_plugin_conventions.example_scorers:word_count"),
+            )
+        ],
+    )
+    assert scoring_module._entry_points() == {
+        "mine": "sqlfluff_plugin_conventions.example_scorers:word_count"
+    }
+
+
+def test_relative_file_path_resolves_from_cwd(monkeypatch, tmp_path):
+    (tmp_path / "scorers.py").write_text("def score(comment):\n    return 0.5\n")
+    monkeypatch.chdir(tmp_path)
+    scorer = load_scorer("scorers.py:score")
+    assert score_comment(CommentContext(comment="x"), scorer).value == 0.5
+
+
+def test_empty_spec_is_rejected():
+    with pytest.raises(SQLFluffUserError, match="empty"):
+        load_scorer("   ")
+
+
+def test_colon_with_empty_side_is_rejected():
+    with pytest.raises(SQLFluffUserError, match="module:function"):
+        load_scorer("module:")
+    with pytest.raises(SQLFluffUserError, match="module:function"):
+        load_scorer(":function")

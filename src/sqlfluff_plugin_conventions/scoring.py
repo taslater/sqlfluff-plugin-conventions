@@ -23,6 +23,10 @@ A scorer that cannot be loaded, returns a non-numeric or out-of-range value,
 or raises, fails the lint run with its own name in the message. A scorer that
 silently does nothing is worse than a broken one, because the corpus comes
 back clean.
+
+Setting ``SQLFLUFF_CONVENTIONS_NO_FILE_SCORERS`` to a truthy value refuses
+the file-path spelling entirely, so a shared CI can allow only installed
+modules and entry points.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ import importlib.metadata
 import importlib.util
 import inspect
 import math
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -42,6 +47,7 @@ from typing import Any
 from sqlfluff.core.errors import SQLFluffUserError
 
 __all__ = [
+    "NO_FILE_SCORERS_ENV",
     "CommentContext",
     "CommentScore",
     "LoadedScorer",
@@ -50,6 +56,15 @@ __all__ = [
 ]
 
 SCORER_ENTRY_POINT_GROUP = "sqlfluff_conventions.comment_scorers"
+
+#: Set to a truthy value to refuse file-path scorers, so shared CI can allow
+#: only installed modules and entry points.
+NO_FILE_SCORERS_ENV = "SQLFLUFF_CONVENTIONS_NO_FILE_SCORERS"
+
+
+def _file_scorers_disabled() -> bool:
+    value = os.environ.get(NO_FILE_SCORERS_ENV, "").strip().lower()
+    return value in ("1", "true", "yes", "on")
 
 
 @dataclass(frozen=True)
@@ -89,11 +104,7 @@ class LoadedScorer:
 def _entry_points() -> dict[str, str]:
     """Installed scorer entry points, mapped name -> ``module:attr`` value."""
     discovered: dict[str, str] = {}
-    try:
-        points = importlib.metadata.entry_points(group=SCORER_ENTRY_POINT_GROUP)
-    except TypeError:  # pragma: no cover - Python 3.10 selectable groups
-        points = importlib.metadata.entry_points().get(SCORER_ENTRY_POINT_GROUP, [])
-    for point in points:
+    for point in importlib.metadata.entry_points(group=SCORER_ENTRY_POINT_GROUP):
         discovered[point.name] = point.value
     return discovered
 
@@ -179,6 +190,7 @@ def _load_from_file(path_text: str, attr: str) -> Callable[..., Any]:
     try:
         spec.loader.exec_module(module)
     except Exception as exc:
+        sys.modules.pop(module_name, None)
         raise SQLFluffUserError(
             f"Comment scorer file {str(path)!r} raised while importing: "
             f"{type(exc).__name__}: {exc}"
@@ -214,6 +226,12 @@ def load_scorer(spec: str) -> LoadedScorer:
                 f"'path/to/scorers.py:function'"
             )
         if target.endswith(".py") or "/" in target or "\\" in target:
+            if _file_scorers_disabled():
+                raise SQLFluffUserError(
+                    f"Comment scorer {text!r} is a file path, but "
+                    f"{NO_FILE_SCORERS_ENV} is set; use an installed module "
+                    f"or an entry point instead"
+                )
             function = _load_from_file(target, attr)
         else:
             function = _load_from_module(target, attr)

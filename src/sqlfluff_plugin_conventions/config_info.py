@@ -11,7 +11,7 @@ silently collide with, or be shadowed by, another plugin's key.
 
 from sqlfluff.core.rules import ConfigInfo
 
-CONFIGS_INFO: dict[str, dict[str, ConfigInfo]] = {
+CONFIGS_INFO: dict[str, ConfigInfo] = {
     "type_patterns": {
         "definition": (
             "A mapping from canonical datatype to the regex a column name "

@@ -1,5 +1,8 @@
 # sqlfluff-plugin-conventions
 
+[![CI](https://github.com/taslater/sqlfluff-plugin-conventions/actions/workflows/ci.yml/badge.svg)](https://github.com/taslater/sqlfluff-plugin-conventions/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Config-driven team conventions for [SQLFluff](https://sqlfluff.com): enforce
 the rules your team actually agreed on — column comments and comment quality,
 type-aware column naming, object naming, `SELECT *` bans, and re-runnability
@@ -10,6 +13,8 @@ The plugin ships **no opinions of its own**. Every rule is inert until your
 should be called is a decision for your team, not for a linter.
 
 ## Install
+
+Requires Python 3.10+ and SQLFluff 4.3.0 or newer.
 
 ```bash
 pip install sqlfluff-plugin-conventions
@@ -202,9 +207,9 @@ report a lie.
 Scorers are code you install or name in config, which is the same trust model
 as SQLFluff plugins themselves — running SQLFluff already executes arbitrary
 code from installed packages. The file-path spelling means a `.sqlfluff` from
-an untrusted source can name a script to import, so treat config as code: use
-the entry-point spelling when configuration is shared across teams. Nothing is
-fetched or `eval`'d from a string.
+an untrusted source can name a script to import, so treat config as code. For
+shared or hardened CI, set `SQLFLUFF_CONVENTIONS_NO_FILE_SCORERS=1` to refuse
+file-path scorers entirely. Nothing is fetched or `eval`'d from a string.
 
 ## Writing your own rules
 
@@ -247,10 +252,15 @@ the package: it changes only with a minor release.
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ../sqlfluff -e ".[dev]"   # fork checkout, or any sqlfluff
-.venv/bin/python -m pytest
-.venv/bin/ruff check src/ test/
+.venv/bin/python -m pytest --cov=sqlfluff_plugin_conventions --cov-fail-under=96
+.venv/bin/ruff check src/ test/ scripts/
+.venv/bin/mypy
 .venv/bin/sqlfluff rules | grep Conventions
 ```
+
+CI runs the same checks plus a pinned `sqlfluff==4.3.0` floor job, a
+`pip-audit` dependency audit, and SHA-pinned actions kept current by
+Dependabot. Releases are published with PEP 740 provenance attestations.
 
 The rule tests are YAML cases under `test/rules/test_cases/`, one file per
 rule, using SQLFluff's own `sqlfluff.utils.testing` harness.

@@ -276,6 +276,30 @@ def _has_partitioned_by(stmt: BaseSegment) -> bool:
     )
 
 
+def _has_adjacent_keywords(seg: BaseSegment, first: str, second: str) -> bool:
+    """Whether ``first`` is immediately followed by ``second`` as keywords."""
+    keywords = [child.raw_upper for child in seg.segments if child.is_type("keyword")]
+    return any(
+        one == first and two == second for one, two in zip(keywords, keywords[1:])
+    )
+
+
+def _column_is_not_null(seg: BaseSegment) -> bool:
+    """True when NOT NULL is written as a constraint, not inside an expression.
+
+    Only direct keyword children and the named constraint/properties subtrees
+    are inspected, so a DEFAULT expression, a CHECK expression or a string
+    literal containing those words cannot falsely satisfy the requirement.
+    """
+    if _has_adjacent_keywords(seg, "NOT", "NULL"):
+        return True
+    return any(
+        _has_adjacent_keywords(child, "NOT", "NULL")
+        for child in seg.segments
+        if child.is_type("column_properties_segment", "column_constraint_segment")
+    )
+
+
 def _table_has_primary_key(stmt: BaseSegment) -> bool:
     bracketed = stmt.get_child("bracketed")
     if bracketed is None:
@@ -429,18 +453,27 @@ def _reference_parts(ref: BaseSegment) -> list[str]:
 
 
 def _match_table(tables: list[Table], name: str) -> Table | None:
-    """Find a created table by name, tolerating qualification differences."""
+    """Find a created table by name, tolerating qualification differences.
+
+    An unambiguous match is required: if two schemas in the same file both
+    declare a table with the same final name, a qualifier-free reference
+    cannot be attributed to either, so nothing is returned rather than a
+    coin-flip.
+    """
     target = name.strip().casefold()
     if not target:
         return None
-    for table in tables:
-        created = table.name.casefold()
-        if created == target:
-            return table
+    exact = [table for table in tables if table.name.casefold() == target]
+    if exact:
+        return exact[0]
     target_last = target.rsplit(".", 1)[-1]
-    for table in tables:
-        if table.name.casefold().rsplit(".", 1)[-1] == target_last:
-            return table
+    suffix_matches = [
+        table
+        for table in tables
+        if table.name.casefold().rsplit(".", 1)[-1] == target_last
+    ]
+    if len(suffix_matches) == 1:
+        return suffix_matches[0]
     return None
 
 
@@ -514,13 +547,13 @@ def _apply_comment_assignments(tree: BaseSegment, analysis: Analysis) -> None:
             continue
         table_ref = stmt.get_child("table_reference")
         column_ref = next(stmt.recursive_crawl("column_reference"), None)
-        literal = next(stmt.recursive_crawl("quoted_literal"), None)
-        if table_ref is None or column_ref is None or literal is None:
+        comment_literal = next(stmt.recursive_crawl("quoted_literal"), None)
+        if table_ref is None or column_ref is None or comment_literal is None:
             continue
         table = _match_table(analysis.tables, _unquote(table_ref.raw))
         parts = _reference_parts(column_ref)
         if table is not None and parts:
-            _set_column_comment(table, parts[-1], _unquote(literal.raw))
+            _set_column_comment(table, parts[-1], _unquote(comment_literal.raw))
 
 
 # --- the walker -------------------------------------------------------------
@@ -568,7 +601,7 @@ def _walk(seg: BaseSegment, table: Table | None, analysis: Analysis) -> None:
                     constraint is not None
                     and _has_keywords(constraint, "PRIMARY", "KEY")
                 ),
-                not_null=_has_keywords(seg, "NOT", "NULL", skip=("data_type",)),
+                not_null=_column_is_not_null(seg),
             )
             analysis.columns.append(column)
             if table is not None:

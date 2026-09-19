@@ -1,3 +1,4 @@
 include src/sqlfluff_plugin_conventions/plugin_default_config.cfg
+include src/sqlfluff_plugin_conventions/py.typed
 include LICENSE
 recursive-include examples *.sqlfluff

@@ -1,5 +1,7 @@
 """All plugin rules, imported lazily by the root module's ``get_rules`` hook."""
 
+from sqlfluff.core.rules import BaseRule
+
 from sqlfluff_plugin_conventions.rules.antipatterns import (
     Rule_Conventions_A001,
     Rule_Conventions_A002,
@@ -25,7 +27,7 @@ from sqlfluff_plugin_conventions.rules.naming import (
 )
 from sqlfluff_plugin_conventions.rules.types import Rule_Conventions_T001
 
-RULES = [
+RULES: list[type[BaseRule]] = [
     Rule_Conventions_N001,
     Rule_Conventions_N002,
     Rule_Conventions_N003,

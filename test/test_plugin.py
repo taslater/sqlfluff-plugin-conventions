@@ -7,6 +7,7 @@ from sqlfluff.core.config import FluffConfig
 from sqlfluff.core.errors import SQLFluffUserError
 from sqlfluff.core.plugin.host import get_plugin_manager
 from sqlfluff.core.rules import get_ruleset
+from sqlfluff.core.types import ConfigMappingType
 
 EXPECTED_CODES = {
     "Conventions_N001",
@@ -78,14 +79,18 @@ def test_default_config_keeps_every_rule_inert():
     }
 
 
-def _build_rulepack(rule_configs: dict):
-    configs = {
+def _rulepack(section: str, rule_configs: ConfigMappingType):
+    configs: ConfigMappingType = {
         "core": {"dialect": "databricks"},
-        "rules": {"conventions.type_naming": rule_configs},
+        "rules": {section: rule_configs},
     }
     return get_ruleset().get_rulepack(
         FluffConfig(configs=configs, overrides={"dialect": "databricks"})
     )
+
+
+def _build_rulepack(rule_configs: ConfigMappingType):
+    return _rulepack("conventions.type_naming", rule_configs)
 
 
 def test_invalid_regex_is_a_config_error():
@@ -166,3 +171,77 @@ def test_parse_list_spellings():
     assert parse_list("declaration, cast") == ["declaration", "cast"]
     assert parse_list('["declaration"]') == ["declaration"]
     assert parse_list("") == []
+
+
+def test_parse_mapping_rejects_json_non_object():
+    from sqlfluff_plugin_conventions.config import parse_mapping
+
+    with pytest.raises(SQLFluffUserError, match="JSON object"):
+        parse_mapping("[1, 2]")
+
+
+def test_parse_mapping_rejects_invalid_json():
+    from sqlfluff_plugin_conventions.config import parse_mapping
+
+    with pytest.raises(SQLFluffUserError, match="JSON object"):
+        parse_mapping("{oops")
+
+
+def test_parse_mapping_regex_keys_split_on_the_last_equals():
+    from sqlfluff_plugin_conventions.config import parse_mapping
+
+    assert parse_mapping("^(?=x)=reason", regex_keys=True) == {"^(?=x)": "reason"}
+
+
+def test_parse_list_rejects_a_json_object():
+    from sqlfluff_plugin_conventions.config import parse_list
+
+    with pytest.raises(SQLFluffUserError, match="JSON object"):
+        parse_list('{"a": 1}')
+
+
+def test_parse_list_rejects_invalid_json():
+    from sqlfluff_plugin_conventions.config import parse_list
+
+    with pytest.raises(SQLFluffUserError, match="JSON array"):
+        parse_list('["a",')
+
+
+def test_parse_mapping_ignores_empty_entries():
+    from sqlfluff_plugin_conventions.config import parse_mapping
+
+    assert parse_mapping("a=1,, b=2,") == {"a": "1", "b": "2"}
+
+
+def _scorer_config(**overrides) -> ConfigMappingType:
+    config: ConfigMappingType = {
+        "comment_score_function": (
+            "sqlfluff_plugin_conventions.example_scorers:word_count"
+        )
+    }
+    config.update(overrides)
+    return config
+
+
+def test_bad_threshold_is_a_config_error():
+    with pytest.raises(SQLFluffUserError, match="comment_score_threshold"):
+        _rulepack(
+            "conventions.comment_quality",
+            _scorer_config(comment_score_threshold="high"),
+        )
+
+
+def test_out_of_range_threshold_is_a_config_error():
+    with pytest.raises(SQLFluffUserError, match="between 0 and 1"):
+        _rulepack(
+            "conventions.comment_quality",
+            _scorer_config(comment_score_threshold="1.5"),
+        )
+
+
+def test_unloadable_scorer_is_a_config_error():
+    with pytest.raises(SQLFluffUserError, match="could not be imported"):
+        _rulepack(
+            "conventions.comment_quality",
+            _scorer_config(comment_score_function="no_such_module:score"),
+        )

@@ -304,3 +304,37 @@ def test_constraints_are_captured():
     assert by_name["b"].primary_key is False
     assert by_name["b"].not_null is True
     assert by_name["c"].not_null is False
+
+
+def test_not_null_detection_ignores_values_containing_the_words():
+    analysis = model(
+        "CREATE TABLE t ( a INT DEFAULT 1, b STRING DEFAULT 'not null', c INT NOT NULL)"
+    )
+    by_name = {column.name: column for column in analysis.tables[0].columns}
+    assert by_name["a"].not_null is False
+    assert by_name["b"].not_null is False
+    assert by_name["c"].not_null is True
+
+
+def test_ambiguous_suffix_match_is_not_guessed():
+    analysis = model(
+        "CREATE TABLE a.t (x INT);"
+        "CREATE TABLE b.t (x INT);"
+        "COMMENT ON COLUMN t.x IS 'applies to neither'"
+    )
+    assert all(
+        column.comment is None for table in analysis.tables for column in table.columns
+    )
+
+
+def test_unique_suffix_match_still_applies():
+    analysis = model(
+        "CREATE TABLE a.t (x INT); COMMENT ON COLUMN t.x IS 'surrogate key'"
+    )
+    assert analysis.tables[0].columns[0].comment == "surrogate key"
+
+
+def test_quoted_identifier_with_a_dot_does_not_crash():
+    analysis = model("CREATE TABLE `my.schema` (a INT)")
+    assert analysis.tables[0].name == "my.schema"
+    assert analysis.tables[0].columns[0].name == "a"

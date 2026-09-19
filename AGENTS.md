@@ -17,15 +17,20 @@ says so. Nothing here is proposed upstream.
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest                       # 100+ tests, seconds
+.venv/bin/python -m pytest                       # tests, seconds
+.venv/bin/python -m pytest --cov=sqlfluff_plugin_conventions
 .venv/bin/ruff check src/ test/ scripts/
 .venv/bin/ruff format src/ test/ scripts/
+.venv/bin/mypy                                   # config in pyproject
 .venv/bin/sqlfluff rules | grep Conventions     # discovery smoke test
 .venv/bin/python scripts/corpus_check.py --config examples/snake-case-team.sqlfluff
 ```
 
 Setup: `python -m venv .venv && .venv/bin/pip install -e ../sqlfluff -e ".[dev]"`
-(the editable SQLFluff fork, or any installed sqlfluff).
+(the editable SQLFluff fork, or any installed sqlfluff). The claimed floor is
+**SQLFluff 4.3.0**, verified by a pinned CI job; earlier 4.x parse several
+databricks constructs differently, so do not lower it without running the
+whole suite against the candidate.
 
 ## The non-obvious constraints
 
@@ -97,12 +102,23 @@ deliberately not attempted; a target not created in the file is ignored.
   leaking out of nested types or view column lists.
 - `test/test_scoring.py` pins the scorer contract: every loader surface,
   both protocols, and every way a scorer can fail (missing, non-callable,
-  wrong arity, raising, non-numeric, NaN, out of range).
+  wrong arity, raising, non-numeric, NaN, out of range), plus the
+  `SQLFLUFF_CONVENTIONS_NO_FILE_SCORERS` lockdown.
 - `test/test_plugin.py` covers registration, defaults, and config errors.
+- `test/test_quality.py` guards shipping properties: every config keyword is
+  documented and defaulted, docstrings conform, unparsable input cannot crash
+  the model, `fix` is a no-op, and the CLI exits non-zero on a broken scorer.
 - `scripts/corpus_check.py` measures noise on real SQL and **always lints a
   deliberately broken control first**. A harness bug that loads no rules
   would otherwise report a clean sweep. Learn from the three times that
   happened in the sibling corpus project.
+
+**Mypy and coverage are gates.** The package ships `py.typed` and the public
+API (`semantics.py`, `scoring.py`) is typed; keep `mypy` clean under the
+config in `pyproject.toml` and do not lower the coverage floor.
+
+**Actions are SHA-pinned**, Dependabot updates them, and releases carry PEP
+740 attestations. Do not replace pinned SHAs with version tags.
 
 ## Known gaps found here
 
