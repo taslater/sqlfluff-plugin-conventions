@@ -146,6 +146,22 @@ and releases carry PEP 740 attestations and an SPDX SBOM. The dev toolchain
 is hash-pinned in `requirements-dev.txt`; regenerate with
 `pip-compile --allow-unsafe --generate-hashes --extra dev --output-file requirements-dev.txt pyproject.toml`.
 
+## Releasing
+
+1. Bump `version` in `pyproject.toml` and date the section in `CHANGELOG.md`
+   (move `[Unreleased]` items under it).
+2. Commit and push; wait for CI, CodeQL and the floor job to pass.
+3. Tag and push the tag: `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`.
+   The `publish.yml` workflow builds, generates an SPDX SBOM and publishes to
+   PyPI via OIDC trusted publishing (no tokens) with PEP 740 attestations.
+4. Verify: `pip install sqlfluff-plugin-conventions` in a clean venv, check
+   the PyPI page shows provenance, then `gh release create vX.Y.Z
+   --generate-notes` for the tag page.
+
+The PyPI trusted publisher is a one-time account setting (project name,
+owner, repo, workflow `publish.yml`, environment `pypi`); nothing in the
+repo needs a secret.
+
 ## Known gaps found here
 
 `DROP MATERIALIZED VIEW` is unparsable in SQLFluff's `databricks` dialect as

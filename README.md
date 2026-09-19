@@ -20,12 +20,6 @@ Requires Python 3.10+ and SQLFluff 4.3.0 or newer.
 pip install sqlfluff-plugin-conventions
 ```
 
-Until the first PyPI release lands, install from git:
-
-```bash
-pip install git+https://github.com/taslater/sqlfluff-plugin-conventions
-```
-
 For development, see "Working on the plugin" below.
 
 ## Quickstart
