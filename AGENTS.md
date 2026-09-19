@@ -134,9 +134,12 @@ test. Never add a pragma to hit the gate.
 
 **Mypy, ruff and mutation are gates.** The package ships `py.typed`; keep
 `mypy` clean under the config in `pyproject.toml`. Mutation testing runs
-weekly and on `src/` PRs with a floor that only ratchets upward — if it
-fails, kill the survivors with tests or document them as equivalent, never
-lower the floor.
+weekly and on `src/` PRs with a floor of 75 that only ratchets upward — if
+it fails, kill the survivors with tests or document them as equivalent,
+never lower the floor. Scores fluctuate a few points between runs because
+the Hypothesis property tests explore different examples (observed band
+roughly 78–83% in September 2026); the floor sits below the band on purpose.
+Target: 90%.
 
 **Actions are SHA-pinned** with version comments, Dependabot updates them,
 and releases carry PEP 740 attestations and an SPDX SBOM. The dev toolchain
