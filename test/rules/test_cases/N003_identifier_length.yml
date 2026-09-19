@@ -1,0 +1,25 @@
+rule: Conventions_N003
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.identifier_length:
+      max_identifier_length: 16
+
+within_limit:
+  pass_str: CREATE TABLE t (short_name INT)
+
+over_limit:
+  fail_str: CREATE TABLE t (a_column_name_far_too_long INT)
+
+exactly_at_limit:
+  pass_str: CREATE TABLE t (fifteen_chars_1 INT)
+
+inert_at_zero:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.identifier_length:
+        max_identifier_length: 0
+  pass_str: CREATE TABLE t (a_column_name_far_too_long INT)

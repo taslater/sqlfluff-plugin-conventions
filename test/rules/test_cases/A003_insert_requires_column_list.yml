@@ -1,0 +1,28 @@
+rule: Conventions_A003
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.insert_requires_column_list:
+      force_enable: True
+
+positional_insert_fails:
+  fail_str: INSERT INTO users SELECT id, email FROM staging
+
+named_columns_pass:
+  pass_str: INSERT INTO users (id, email) SELECT id, email FROM staging
+
+by_name_passes:
+  pass_str: INSERT INTO users BY NAME SELECT id, email FROM staging
+
+values_without_columns_fails:
+  fail_str: INSERT INTO users VALUES (1, 'a@example.com')
+
+values_with_columns_passes:
+  pass_str: INSERT INTO users (id, email) VALUES (1, 'a@example.com')
+
+inert_without_force_enable:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: INSERT INTO users SELECT id FROM staging

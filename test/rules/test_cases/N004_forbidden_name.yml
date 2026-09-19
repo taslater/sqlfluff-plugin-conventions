@@ -1,0 +1,33 @@
+rule: Conventions_N004
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.forbidden_name:
+      forbidden_patterns: "_tmp$=use _scratch instead"
+
+forbidden_column_suffix:
+  fail_str: CREATE TABLE t (id_tmp INT)
+
+forbidden_table_suffix:
+  fail_str: CREATE TABLE orders_tmp (id INT)
+
+allowed_name:
+  pass_str: CREATE TABLE orders_scratch (id INT)
+
+columns_can_be_exempt:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.forbidden_name:
+        forbidden_patterns: "_tmp$=use _scratch instead"
+        forbidden_columns: False
+        forbidden_tables: True
+  pass_str: CREATE TABLE orders_scratch (id_tmp INT)
+
+inert_without_patterns:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE TABLE orders_tmp (id_tmp INT)

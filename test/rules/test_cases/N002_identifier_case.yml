@@ -1,0 +1,74 @@
+rule: Conventions_N002
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.identifier_case:
+      case_convention: snake
+      case_columns: True
+      case_tables: True
+
+snake_declarations_pass:
+  pass_str: CREATE TABLE order_items (order_id INT)
+
+camel_column_fails:
+  fail_str: CREATE TABLE order_items (orderId INT)
+
+capitalised_table_fails:
+  fail_str: CREATE TABLE SalesOrders (order_id INT)
+
+select_alias_is_checked:
+  fail_str: SELECT total AS orderId FROM t
+
+upper_snake:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.identifier_case:
+        case_convention: upper_snake
+        case_columns: True
+        case_tables: True
+  pass_str: CREATE TABLE ORDER_ITEMS (ORDER_ID INT)
+
+upper_snake_rejects_snake:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.identifier_case:
+        case_convention: upper_snake
+        case_columns: True
+  fail_str: CREATE TABLE order_items (order_id INT)
+
+camel:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.identifier_case:
+        case_convention: camel
+        case_columns: True
+  pass_str: SELECT CAST(x AS INT) AS orderId FROM t
+
+checks_can_be_disabled:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.identifier_case:
+        case_convention: snake
+        case_columns: False
+        case_tables: False
+  pass_str: CREATE TABLE SalesOrders (orderId INT)
+
+tables_only:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.identifier_case:
+        case_convention: snake
+        case_columns: False
+        case_tables: True
+  fail_str: CREATE TABLE SalesOrders (orderId INT)

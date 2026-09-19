@@ -1,0 +1,69 @@
+rule: Conventions_N001
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.type_naming:
+      type_patterns: "BOOLEAN=_ind$"
+
+matching_declaration:
+  pass_str: CREATE TABLE t (active_ind BOOLEAN)
+
+mismatched_declaration:
+  fail_str: CREATE TABLE t (active BOOLEAN)
+
+mismatched_cast_alias:
+  fail_str: SELECT CAST(x AS BOOLEAN) AS active FROM t
+
+unknown_type_is_skipped:
+  # No locally knowable type: the rule never guesses.
+  pass_str: SELECT total AS active FROM t
+
+expression_cast_is_not_a_cast:
+  pass_str: SELECT CAST(a AS INT) + 1 AS active FROM t
+
+# INT and INTEGER are the same type, so a config should not need both.
+type_aliases_are_folded:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_naming:
+        type_patterns: "INTEGER=_num$"
+  fail_str: CREATE TABLE t (count INT)
+
+# DECIMAL(10,2) still matches a DECIMAL pattern.
+type_parameters_are_ignored:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_naming:
+        type_patterns: "DECIMAL=_amount$"
+  fail_str: CREATE TABLE t (price DECIMAL(10,2))
+
+origin_can_be_restricted_to_declarations:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_naming:
+        type_patterns: "BOOLEAN=_ind$"
+        type_origins: declaration
+  pass_str: SELECT CAST(x AS BOOLEAN) AS active FROM t
+
+view_column_lists_are_skipped:
+  # View column lists carry no datatype, so the rule stays quiet there.
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.type_naming:
+        type_patterns: "INT=_id$"
+  pass_str: CREATE VIEW v (order_ref) AS SELECT 1
+
+inert_without_patterns:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE TABLE t (anything BOOLEAN)

@@ -1,0 +1,59 @@
+rule: Conventions_M001
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.require_comment:
+      require_table_comments: True
+      require_column_comments: True
+      comment_min_length: 1
+      comment_forbidden_patterns: "^(todo|tbd|n/?a)$"
+
+fully_commented:
+  pass_str: |
+    CREATE TABLE users (
+        id BIGINT COMMENT 'Surrogate key',
+        email STRING COMMENT 'Primary contact'
+    ) COMMENT 'Registered users'
+
+missing_table_comment:
+  fail_str: CREATE TABLE users (id BIGINT COMMENT 'Surrogate key') COMMENT ''
+
+missing_column_comment:
+  fail_str: CREATE TABLE users (id BIGINT, email STRING COMMENT 'Primary contact') COMMENT 'Registered users'
+
+placeholder_comment_is_case_insensitive:
+  fail_str: CREATE TABLE users (id BIGINT COMMENT 'TODO') COMMENT 'Registered users'
+
+missing_column_comment_on_view:
+  fail_str: CREATE VIEW v (a COMMENT 'column a', b) COMMENT 'view doc' AS SELECT 1
+
+minimum_length:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_comment:
+        require_column_comments: True
+        comment_min_length: 10
+  fail_str: CREATE TABLE users (id BIGINT COMMENT 'short')
+
+meets_minimum_length:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_comment:
+        require_column_comments: True
+        comment_min_length: 10
+  pass_str: CREATE TABLE users (id BIGINT COMMENT 'long enough for anyone')
+
+table_comments_can_be_disabled:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_comment:
+        require_table_comments: False
+        require_column_comments: False
+  pass_str: CREATE TABLE users (id BIGINT)

@@ -1,0 +1,3 @@
+include src/sqlfluff_plugin_conventions/plugin_default_config.cfg
+include LICENSE
+recursive-include examples *.sqlfluff

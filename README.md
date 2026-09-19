@@ -1,0 +1,176 @@
+# sqlfluff-plugin-conventions
+
+Config-driven team conventions for [SQLFluff](https://sqlfluff.com): enforce
+the rules your team actually agreed on — column comments and comment quality,
+type-aware column naming, object naming, `SELECT *` bans, and re-runnability
+anti-patterns — in the same lint pass as everything else.
+
+The plugin ships **no opinions of its own**. Every rule is inert until your
+`.sqlfluff` config switches it on and supplies the patterns. What a column
+should be called is a decision for your team, not for a linter.
+
+## Install
+
+```bash
+pip install git+https://github.com/taslater/sqlfluff-plugin-conventions
+```
+
+For development, see "Working on the plugin" below.
+
+## Quickstart
+
+Copy an example config to your project root and lint:
+
+```bash
+cp examples/snake-case-team.sqlfluff .sqlfluff
+sqlfluff lint models/
+```
+
+Or point at a config without renaming it:
+
+```bash
+sqlfluff lint models/ --config examples/comments-quality.sqlfluff
+```
+
+`examples/demo.sql` is a deliberately non-compliant file to see the output:
+
+```bash
+sqlfluff lint examples/demo.sql --config examples/snake-case-team.sqlfluff
+```
+
+The examples are starting points, not recommendations:
+`snake-case-team.sqlfluff` and `hungarian-team.sqlfluff` express **opposite**
+naming conventions with the same rules, and there is a test asserting they
+disagree.
+
+On an existing codebase, expect a backlog the first time you enable a rule:
+measured over 867 published Databricks SQL files, `no_select_star` and
+`require_comment` each fire on roughly a third of files, while type-aware
+naming fires on about 5% (it only sees declared types). Roll out rule by rule
+with `sqlfluff lint --rules`, or start by enforcing them on new files only.
+Run `scripts/corpus_check.py` against your own code to see what a config will
+find before you commit to it.
+
+## Rules
+
+| Code | Name | What it checks | Key config |
+| --- | --- | --- | --- |
+| `Conventions_N001` | `conventions.type_naming` | Column name matches a regex chosen by its **declared type** | `type_patterns`, `type_origins` |
+| `Conventions_N002` | `conventions.identifier_case` | snake / upper_snake / camel / pascal | `case_convention`, `case_columns`, `case_tables` |
+| `Conventions_N003` | `conventions.identifier_length` | Maximum column-name length | `max_identifier_length` |
+| `Conventions_N004` | `conventions.forbidden_name` | Names matching banned patterns, with a reason | `forbidden_patterns` |
+| `Conventions_N005` | `conventions.object_name` | Per-kind naming for tables, views, streaming tables, materialized views | `object_patterns` |
+| `Conventions_M001` | `conventions.require_comment` | Comments exist and are meaningful | `require_table_comments`, `require_column_comments`, `comment_min_length`, `comment_forbidden_patterns` |
+| `Conventions_M002` | `conventions.require_table_properties` | Required `TBLPROPERTIES` keys and values | `required_property_keys`, `required_property_values` |
+| `Conventions_M003` | `conventions.require_table_provider` | `USING` allowlist | `allowed_providers`, `require_explicit_provider` |
+| `Conventions_A001` | `conventions.no_select_star` | `SELECT *` (optionally allowing `t.*`) | `force_enable`, `allow_qualified_star` |
+| `Conventions_A002` | `conventions.drop_requires_if_exists` | `DROP … IF EXISTS` | `force_enable` |
+| `Conventions_A003` | `conventions.insert_requires_column_list` | Named `INSERT` columns or `BY NAME` | `force_enable` |
+
+Rules with no patterns of their own are off until `force_enable = True` in
+their config section. The rest are inert until their patterns or booleans are
+set. `sqlfluff rules` lists them all; run `sqlfluff rules --verbose` for full
+configuration docs.
+
+### Type-aware naming, the unusual one
+
+`conventions.type_naming` maps a canonical datatype to a regex the column name
+must match:
+
+```ini
+[sqlfluff:rules:conventions.type_naming]
+type_patterns = BOOLEAN=_ind$, DATE=_date$, TIMESTAMP=_timestamp$
+type_origins = declaration, cast
+```
+
+Types are canonical, so one entry covers every spelling: `INT` and `INTEGER`
+are the same, as are `TIMESTAMP_NTZ`/`TIMESTAMP`, `VARCHAR`/`CHAR`/`STRING`,
+`DECIMAL`/`NUMERIC`/`DEC`/parameters. Patterns are matched with `search`, so
+anchor with `^` and `$` as needed.
+
+The rule resolves a type only where the file itself states one: a
+`CREATE TABLE` column declaration, a view column list (which carries no type),
+or an explicit `CAST(x AS T) AS name` / `x::T AS name`. A column like
+`total AS revenue` has no locally knowable type and is **skipped** — the rule
+never guesses, because a guess is invisible in the diagnostic and a wrong
+report looks like a real finding.
+
+### Two ways to write structured config
+
+INI values are strings, so mappings and lists accept either a readable spelling
+or JSON. The JSON spelling is the escape hatch when a regex contains `,` or
+`=`:
+
+```ini
+[sqlfluff:rules:conventions.type_naming]
+type_patterns = BOOLEAN=_ind$, DATE=_date$
+
+[sqlfluff:rules:conventions.require_table_properties]
+required_property_values = {"quality": "gold", "owner": "data"}
+
+[sqlfluff:rules:conventions.require_comment]
+comment_forbidden_patterns = ["^(todo|tbd|n/?a)$", "the .*"]
+```
+
+Malformed values raise a config error naming the offending text; nothing is
+silently dropped.
+
+## Writing your own rules
+
+`semantics.py` is a public API. It turns any SQLFluff parse tree into a small
+model — `Table`, `Column`, `SelectStar` — so you can write team rules without
+learning each dialect's segment names:
+
+```python
+from sqlfluff.core.rules import BaseRule
+from sqlfluff.core.rules.crawlers import RootOnlyCrawler
+from sqlfluff_plugin_conventions.semantics import analyse
+
+
+class Rule_MyTeam_X001(BaseRule):
+    """Every table must have at least one column."""
+
+    name = "myteam.at_least_one_column"
+    groups = ("all",)
+
+    crawl_behaviour = RootOnlyCrawler()
+
+    def _eval(self, context):
+        results = []
+        for table in analyse(context.segment).tables:
+            if not table.columns:
+                results.append(self._result(anchor=table.segment))  # your wording
+        return results or None
+```
+
+Columns carry `name`, `canonical_type`, `raw_type`, `comment`, `origin`
+(`declaration` / `cast` / `alias`) and the `segment` to anchor a violation on.
+The API is versioned with the package: it changes only with a minor release.
+
+## Working on the plugin
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -e ../sqlfluff -e ".[dev]"   # fork checkout, or any sqlfluff
+.venv/bin/python -m pytest
+.venv/bin/ruff check src/ test/
+.venv/bin/sqlfluff rules | grep Conventions
+```
+
+The rule tests are YAML cases under `test/rules/test_cases/`, one file per
+rule, using SQLFluff's own `sqlfluff.utils.testing` harness.
+
+### Measuring against a corpus
+
+`scripts/corpus_check.py` lints a directory of real SQL with one of the
+example configs and counts findings per rule. It exists to answer "how noisy
+is this rule on published SQL?", and it always lints a deliberately broken
+control first so a harness that loads nothing cannot report success:
+
+```bash
+.venv/bin/python scripts/corpus_check.py --config examples/snake-case-team.sqlfluff
+```
+
+## Licence
+
+MIT.

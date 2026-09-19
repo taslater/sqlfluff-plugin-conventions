@@ -1,0 +1,16 @@
+# Documentation quality, without taking a position on naming.
+#
+# A comment that exists but says nothing ("the date", "n/a", "TODO") is worse
+# than no comment at all: it passes a checklist while carrying no meaning.
+# comment_min_length rejects short ones; comment_forbidden_patterns rejects
+# the standard placeholders. Those regexes are matched case-insensitively.
+
+[sqlfluff]
+dialect = databricks
+rules = Conventions_M001
+
+[sqlfluff:rules:conventions.require_comment]
+require_table_comments = True
+require_column_comments = True
+comment_min_length = 12
+comment_forbidden_patterns = ^(todo|tbd|n/?a|none|the .*)$

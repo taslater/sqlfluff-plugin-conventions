@@ -1,0 +1,25 @@
+rule: Conventions_A002
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.drop_requires_if_exists:
+      force_enable: True
+
+drop_table_without_if_exists:
+  fail_str: DROP TABLE users
+
+drop_view_without_if_exists:
+  fail_str: DROP VIEW active_users
+
+with_if_exists_passes:
+  pass_str: DROP TABLE IF EXISTS users
+
+drop_view_with_if_exists_passes:
+  pass_str: DROP VIEW IF EXISTS active_users
+
+inert_without_force_enable:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: DROP TABLE users

@@ -1,0 +1,10 @@
+# Object naming per kind: views, tables, streaming tables and materialized
+# views each get their own pattern. Patterns match the object's own name, so
+# catalog and schema qualifiers are ignored.
+
+[sqlfluff]
+dialect = databricks
+rules = Conventions_N005
+
+[sqlfluff:rules:conventions.object_name]
+object_patterns = view=^vw_, table=^tbl_, streaming_table=^st_, materialized_view=^mv_

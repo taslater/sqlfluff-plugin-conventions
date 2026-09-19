@@ -1,0 +1,43 @@
+rule: Conventions_N005
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.object_name:
+      object_patterns: "view=^vw_, table=^tbl_"
+
+view_prefix_pass:
+  pass_str: CREATE VIEW vw_active_users AS SELECT 1
+
+view_prefix_fail:
+  fail_str: CREATE VIEW active_users AS SELECT 1
+
+table_prefix_fail:
+  fail_str: CREATE TABLE orders (id INT)
+
+qualified_name_matches_last_part:
+  pass_str: CREATE VIEW analytics.marts.vw_active_users AS SELECT 1
+
+streaming_table_kind:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.object_name:
+        object_patterns: "streaming_table=^st_"
+  fail_str: CREATE STREAMING TABLE raw_events AS SELECT 1
+
+materialized_view_kind:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.object_name:
+        object_patterns: "materialized_view=^mv_"
+  pass_str: CREATE MATERIALIZED VIEW mv_sales AS SELECT 1
+
+inert_without_patterns:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE VIEW anything AS SELECT 1

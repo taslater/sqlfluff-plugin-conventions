@@ -1,0 +1,35 @@
+rule: Conventions_M003
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.require_table_provider:
+      allowed_providers: delta
+
+delta_allowed:
+  pass_str: CREATE TABLE orders (id BIGINT) USING delta
+
+parquet_rejected:
+  fail_str: CREATE TABLE orders (id BIGINT) USING parquet
+
+views_have_no_provider:
+  pass_str: CREATE VIEW v AS SELECT 1
+
+explicit_required:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.require_table_provider:
+        allowed_providers: delta
+        require_explicit_provider: True
+  fail_str: CREATE TABLE orders (id BIGINT)
+
+explicit_not_required:
+  pass_str: CREATE TABLE orders (id BIGINT)
+
+inert_without_allowlist:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE TABLE orders (id BIGINT) USING parquet

@@ -1,0 +1,51 @@
+# snake_case with type SUFFIXES.
+#
+# A column's name ends with a token that tells you its type, so you can read a
+# schema without looking up types. Booleans end in _ind, dates in _date and
+# timestamps in _timestamp.
+#
+# Compare with hungarian-team.sqlfluff, which uses the opposite convention.
+# Neither is the plugin's recommendation -- they exist to show the same rules
+# express either one.
+
+[sqlfluff]
+dialect = databricks
+rules =
+    Conventions_N001,
+    Conventions_N002,
+    Conventions_N003,
+    Conventions_M001,
+    Conventions_M003,
+    Conventions_A001,
+    Conventions_A002
+
+[sqlfluff:rules:conventions.type_naming]
+# Type -> regex the column name must match.
+# Types are canonical: INT and INTEGER are the same, as are TIMESTAMP_NTZ and
+# TIMESTAMP, VARCHAR and STRING.
+type_patterns = BOOLEAN=_ind$, DATE=_date$, TIMESTAMP=_timestamp$, BIGINT=_(id|key|count|amount|number)$
+# Check both CREATE TABLE declarations and explicit CAST(x AS T) AS name.
+# Columns whose type cannot be resolved from the file are always skipped.
+type_origins = declaration, cast
+
+[sqlfluff:rules:conventions.identifier_case]
+case_convention = snake
+case_columns = True
+case_tables = True
+
+[sqlfluff:rules:conventions.identifier_length]
+max_identifier_length = 128
+
+[sqlfluff:rules:conventions.require_comment]
+require_table_comments = True
+require_column_comments = True
+comment_forbidden_patterns = ^(todo|tbd|n/?a|none)$
+
+[sqlfluff:rules:conventions.require_table_provider]
+allowed_providers = delta
+
+[sqlfluff:rules:conventions.no_select_star]
+force_enable = True
+
+[sqlfluff:rules:conventions.drop_requires_if_exists]
+force_enable = True

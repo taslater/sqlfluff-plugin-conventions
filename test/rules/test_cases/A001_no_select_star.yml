@@ -1,0 +1,45 @@
+rule: Conventions_A001
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.no_select_star:
+      force_enable: True
+
+bare_star_fails:
+  fail_str: SELECT * FROM users
+
+explicit_columns_pass:
+  pass_str: SELECT id, email FROM users
+
+qualified_star_fails_by_default:
+  fail_str: SELECT t.* FROM users AS t
+
+qualified_star_can_be_allowed:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.no_select_star:
+        force_enable: True
+        allow_qualified_star: True
+  pass_str: SELECT t.* FROM users AS t
+
+bare_star_still_fails_when_qualified_allowed:
+  configs:
+    core:
+      dialect: databricks
+    rules:
+      conventions.no_select_star:
+        force_enable: True
+        allow_qualified_star: True
+  fail_str: SELECT * FROM users
+
+inert_without_force_enable:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: SELECT * FROM users
+
+inside_exists_still_counts:
+  fail_str: SELECT id FROM users WHERE EXISTS (SELECT * FROM orders)

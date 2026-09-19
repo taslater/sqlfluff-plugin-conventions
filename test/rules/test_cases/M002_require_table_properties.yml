@@ -1,0 +1,32 @@
+rule: Conventions_M002
+configs:
+  core:
+    dialect: databricks
+  rules:
+    conventions.require_table_properties:
+      required_property_keys: "owner"
+      required_property_values: "quality=gold"
+
+all_properties_present:
+  pass_str: |
+    CREATE TABLE orders (id BIGINT)
+    TBLPROPERTIES ('owner' = 'data', 'quality' = 'gold')
+
+missing_key:
+  fail_str: |
+    CREATE TABLE orders (id BIGINT)
+    TBLPROPERTIES ('quality' = 'gold')
+
+wrong_value:
+  fail_str: |
+    CREATE TABLE orders (id BIGINT)
+    TBLPROPERTIES ('owner' = 'data', 'quality' = 'silver')
+
+no_properties_at_all:
+  fail_str: CREATE TABLE orders (id BIGINT)
+
+inert_without_requirements:
+  configs:
+    core:
+      dialect: databricks
+  pass_str: CREATE TABLE orders (id BIGINT)

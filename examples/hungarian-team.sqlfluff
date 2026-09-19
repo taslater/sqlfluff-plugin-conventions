@@ -1,0 +1,30 @@
+# snake_case with type PREFIXES -- the opposite of snake-case-team.sqlfluff.
+#
+# Here the type token leads: is_active rather than active_ind, dt_created
+# rather than created_date. Included to make the point that the rule engine
+# has no preference: the same type_naming rule expresses either convention,
+# and neither ships as a default.
+
+[sqlfluff]
+dialect = databricks
+rules =
+    Conventions_N001,
+    Conventions_N002,
+    Conventions_N004,
+    Conventions_A002
+
+[sqlfluff:rules:conventions.type_naming]
+type_patterns = BOOLEAN=^(is|has|can|should)_, DATE=^dt_, TIMESTAMP=^ts_, DECIMAL=^amt_
+type_origins = declaration, cast
+
+[sqlfluff:rules:conventions.identifier_case]
+case_convention = snake
+case_columns = True
+case_tables = True
+
+[sqlfluff:rules:conventions.forbidden_name]
+# Suffix-style names are wrong under this convention.
+forbidden_patterns = _ind$=use an is_/has_ prefix instead of an _ind suffix, _flag$=use an is_/has_ prefix instead of a _flag suffix
+
+[sqlfluff:rules:conventions.drop_requires_if_exists]
+force_enable = True
