@@ -55,7 +55,7 @@ jobs:
           python-version: "3.10"
       - name: Install the declared floor
         run: |
-          pip install "sqlfluff==4.3.0" pytest
+          pip install "sqlfluff==4.3.0" pytest hypothesis
           pip install -e . --no-deps
       - name: Test against the floor
         run: pytest -q
