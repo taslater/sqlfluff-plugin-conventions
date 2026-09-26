@@ -1,0 +1,70 @@
+# .sqlfluff for Databricks patch/migration scripts.
+#
+# Goal: stop policing capitalization and formatting, and instead catch two
+# substantive problems in DDL patch scripts -- wrong/forbidden column names,
+# and CREATE TABLE statements that omit a PRIMARY KEY. Every SQLFluff
+# built-in rule (capitalisation, layout, whitespace, comma style, etc.) is
+# switched off below by omission: `rules =` is an explicit allowlist, so
+# only the two Conventions_* codes named run. That is the whole mechanism
+# for "disable every lint error" -- no exclude-list to maintain across
+# releases.
+#
+# ---------------------------------------------------------------------------
+# MENU -- every rule sqlfluff-plugin-conventions ships. All are off unless
+# their code is in `rules =` below; [ACTIVE] marks what this file turns on.
+# Add a code to `rules =` and fill in its `[sqlfluff:rules:...]` block (see
+# the plugin's README / examples/*.sqlfluff) to turn on more.
+# ---------------------------------------------------------------------------
+# Naming
+#   Conventions_N001  conventions.type_naming             column name matches a pattern chosen by its declared type
+#   Conventions_N002  conventions.identifier_case          snake / upper_snake / camel / pascal casing
+#   Conventions_N003  conventions.identifier_length        maximum column-name length
+#   Conventions_N004  conventions.forbidden_name           names matching a banned pattern, with a reason        [ACTIVE]
+#   Conventions_N005  conventions.object_name              per-kind naming for tables/views/streaming tables/materialized views
+#   Conventions_N006  conventions.require_qualified_names  created objects must be schema-qualified
+# Metadata
+#   Conventions_M001  conventions.require_comment          tables/columns must carry a meaningful COMMENT
+#   Conventions_M002  conventions.require_table_properties required TBLPROPERTIES keys/values
+#   Conventions_M003  conventions.require_table_provider   USING allowlist
+#   Conventions_M004  conventions.comment_quality          comment score from your own scorer function clears a threshold
+#   Conventions_M005  conventions.require_table_design     CLUSTER BY / PARTITIONED BY declared
+#   Conventions_M006  conventions.require_constraints      PRIMARY KEY / NOT NULL present                        [ACTIVE]
+# Types
+#   Conventions_T001  conventions.type_policy              forbidden types; explicit precision/scale required
+# Antipatterns
+#   Conventions_A001  conventions.no_select_star           SELECT * forbidden
+#   Conventions_A002  conventions.drop_requires_if_exists  DROP ... IF EXISTS
+#   Conventions_A003  conventions.insert_requires_column_list  named INSERT columns, or BY NAME
+#   Conventions_A004  conventions.delete_without_where     predicate-free DELETE
+#   Conventions_A005  conventions.update_without_where     predicate-free UPDATE
+# ---------------------------------------------------------------------------
+
+[sqlfluff]
+dialect = databricks
+
+rules =
+    Conventions_N004,
+    Conventions_M006
+
+# --- naming errors: bad / forbidden column names ----------------------------
+# `regex=reason` pairs; the reason is echoed in the violation message. This
+# is a denylist, not a spellchecker: it catches names you already know are
+# wrong (deprecated columns, banned abbreviations, PII-flagged names), not
+# arbitrary typos against a schema the linter has no way to see. Replace the
+# placeholders with your team's actual banned names/patterns. A reason must
+# not itself contain a comma (the entry separator) or another '=' -- use the
+# JSON spelling ({"regex": "reason"}) instead if you need either.
+[sqlfluff:rules:conventions.forbidden_name]
+forbidden_patterns = ^(usr|cust)_id$=use user_id / customer_id, _old$=drop the column instead of renaming it, ^password$=never store raw -- use password_hash
+forbidden_columns = True
+forbidden_tables = False
+
+# --- CREATE TABLE must declare a PRIMARY KEY --------------------------------
+# Databricks primary keys are informational rather than enforced by the
+# engine, but requiring one documents the grain of every table a patch
+# script creates. Applies to CREATE TABLE / CREATE STREAMING TABLE with
+# declared columns; views are exempt. Flip require_not_null on too if you
+# also want every column proven NOT NULL.
+[sqlfluff:rules:conventions.require_constraints]
+require_primary_key = True
+require_not_null = False
