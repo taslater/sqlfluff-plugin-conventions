@@ -4,6 +4,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # Minor and patch bumps in one PR. One PR per package meant one CI run
+      # and one up-to-date merge each. sqlfluff stays out of the group: a bump
+      # of it in requirements-floor.txt must be refused (see AGENTS.md), so it
+      # has to arrive on its own.
+      pip:
+        patterns: ["*"]
+        exclude-patterns: ["sqlfluff"]
+        update-types: [minor, patch]
     ignore:
       # sqlfluff 4.3.0 pins click<8.5.0, so higher click bumps cannot
       # resolve. Remove this when SQLFluff's cap moves.
@@ -12,3 +21,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # codeql-action's init and analyze must be one version: bumped in
+      # separate PRs, each fails CodeQL.
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
